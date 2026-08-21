@@ -56,10 +56,34 @@ Property.belongsTo(User, { foreignKey: 'ownerId', as: 'owner' });
 
 const app = express();
 
+// ── CORS Config ──
+const allowedOrigins = [
+  'http://localhost:3000',
+  'http://localhost:5173',
+  'http://localhost:5174',
+  'https://propertydeal-frontend.vercel.app', // production URL
+];
+
 app.use(cors({
-  origin: ['http://localhost:3000', 'http://localhost:5173', 'http://localhost:5174'],
-  credentials: true
+  origin: function (origin, callback) {
+    // allow requests with no origin (like mobile apps, curl, Postman)
+    if (!origin) return callback(null, true);
+
+    // allow exact matches from the list above
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+
+    // allow any Vercel preview deployment (e.g. propertydeal-frontend-xxxxx-princerajput5868.vercel.app)
+    if (/^https:\/\/propertydeal-frontend.*\.vercel\.app$/.test(origin)) {
+      return callback(null, true);
+    }
+
+    return callback(new Error('Not allowed by CORS'));
+  },
+  credentials: true,
 }));
+
 app.use(express.json());
 
 app.get('/', (req, res) => {
