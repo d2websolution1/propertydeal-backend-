@@ -1,6 +1,6 @@
 // models/Enquiry.js
 import { DataTypes } from 'sequelize';
-import sequelize from '../config/db.js'; // ✅ Correct path - db.js not database.js
+import sequelize from '../config/db.js';
 
 const Enquiry = sequelize.define('Enquiry', {
   id: {
@@ -54,6 +54,7 @@ const Enquiry = sequelize.define('Enquiry', {
   }
 }, {
   tableName: 'enquiries',
+  freezeTableName: true,
   timestamps: true
 });
 

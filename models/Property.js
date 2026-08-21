@@ -16,7 +16,7 @@ const Property = sequelize.define('Property', {
     allowNull: false,
   },
   propertyType: {
-    type: DataTypes.STRING, // e.g. Apartment, Villa, Plot, Commercial
+    type: DataTypes.STRING,
     allowNull: false,
   },
   listingType: {
@@ -40,7 +40,7 @@ const Property = sequelize.define('Property', {
     allowNull: true,
   },
   images: {
-    type: DataTypes.JSON, // array of image URLs
+    type: DataTypes.JSON,
     defaultValue: [],
   },
   status: {
@@ -62,12 +62,15 @@ const Property = sequelize.define('Property', {
   uniqueCode: {
     type: DataTypes.STRING,
     unique: true,
-    allowNull: true, // auto-generated on create, see controller
+    allowNull: true,
   },
   ownerId: {
     type: DataTypes.INTEGER,
     allowNull: false,
   },
+}, {
+  tableName: 'properties',
+  freezeTableName: true,
 });
 
 export default Property;

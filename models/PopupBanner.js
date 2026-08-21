@@ -7,12 +7,15 @@ const PopupBanner = sequelize.define('PopupBanner', {
   link: { type: DataTypes.STRING, allowNull: true },
   showOnPages: {
     type: DataTypes.JSON,
-    defaultValue: ['homepage'], // ['homepage', 'rent', 'buy', ...] ya ['all']
+    defaultValue: ['homepage'],
   },
   delaySeconds: { type: DataTypes.INTEGER, defaultValue: 3 },
   startDate: { type: DataTypes.DATEONLY, allowNull: true },
   endDate: { type: DataTypes.DATEONLY, allowNull: true },
   isActive: { type: DataTypes.BOOLEAN, defaultValue: true },
+}, {
+  tableName: 'popupbanners',
+  freezeTableName: true,
 });
 
-export default PopupBanner; 
+export default PopupBanner;

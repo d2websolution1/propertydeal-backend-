@@ -28,6 +28,9 @@ const CmsPage = sequelize.define('CmsPage', {
     type: DataTypes.BOOLEAN,
     defaultValue: true,
   },
+}, {
+  tableName: 'cmspages',
+  freezeTableName: true,
 });
 
 export default CmsPage;

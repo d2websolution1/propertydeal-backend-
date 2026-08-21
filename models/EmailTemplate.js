@@ -6,12 +6,14 @@ const EmailTemplate = sequelize.define('EmailTemplate', {
     type: DataTypes.STRING,
     allowNull: false,
     unique: true,
-    // 'welcome', 'otp', 'listing-approved', 'listing-rejected', 'password-reset'
   },
   name: { type: DataTypes.STRING, allowNull: false },
   subject: { type: DataTypes.STRING, allowNull: false },
-  body: { type: DataTypes.TEXT, allowNull: false }, // HTML, {{variables}} support
+  body: { type: DataTypes.TEXT, allowNull: false },
   isActive: { type: DataTypes.BOOLEAN, defaultValue: true },
+}, {
+  tableName: 'emailtemplates',
+  freezeTableName: true,
 });
 
 export default EmailTemplate;

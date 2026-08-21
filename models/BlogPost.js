@@ -50,6 +50,9 @@ const BlogPost = sequelize.define('BlogPost', {
     type: DataTypes.INTEGER,
     defaultValue: 0,
   },
+}, {
+  tableName: 'blogposts',
+  freezeTableName: true,
 });
 
 export default BlogPost;

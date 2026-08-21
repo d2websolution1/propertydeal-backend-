@@ -14,6 +14,9 @@ const Advertisement = sequelize.define('Advertisement', {
   clicks: { type: DataTypes.INTEGER, defaultValue: 0 },
   impressions: { type: DataTypes.INTEGER, defaultValue: 0 },
   isActive: { type: DataTypes.BOOLEAN, defaultValue: true },
+}, {
+  tableName: 'advertisements',
+  freezeTableName: true,
 });
 
 export default Advertisement;
