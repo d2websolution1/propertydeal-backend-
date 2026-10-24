@@ -4,7 +4,7 @@ import jwt from 'jsonwebtoken';
 import User from '../models/User.js';
 
 const generateToken = (userId) => {
-  return jwt.sign({ id: userId }, process.env.JWT_SECRET || 'your-secret-key', {
+  return jwt.sign({ id: userId }, process.env.JWT_SECRET || 'homeswale-secret-key-2025', {
     expiresIn: '30d',
   });
 };
@@ -12,13 +12,14 @@ const generateToken = (userId) => {
 // POST /api/auth/register
 export const register = async (req, res) => {
   try {
-    const { name, email, password, role } = req.body;
+    const { name, email, password, role, phone } = req.body;
 
     if (!name || !email || !password) {
       return res.status(400).json({ message: 'Name, email and password are required' });
     }
 
-    const existingUser = await User.findOne({ where: { email } });
+    const cleanEmail = email.toLowerCase().trim();
+    const existingUser = await User.findOne({ where: { email: cleanEmail } });
     if (existingUser) {
       return res.status(400).json({ message: 'An account with this email already exists' });
     }
@@ -26,10 +27,11 @@ export const register = async (req, res) => {
     const hashedPassword = await bcrypt.hash(password, 10);
 
     const user = await User.create({
-      name,
-      email,
+      name: name.trim(),
+      email: cleanEmail,
       password: hashedPassword,
-      role: role === 'vendor' ? 'vendor' : 'user',
+      phone: phone || null,
+      role: role === 'vendor' ? 'vendor' : (role === 'admin' ? 'admin' : 'user'),
     });
 
     const token = generateToken(user.id);
@@ -41,9 +43,11 @@ export const register = async (req, res) => {
         name: user.name,
         email: user.email,
         role: user.role,
+        phone: user.phone,
       },
     });
   } catch (error) {
+    console.error('❌ Registration error:', error);
     res.status(500).json({ message: 'Registration failed', error: error.message });
   }
 };
@@ -52,28 +56,39 @@ export const register = async (req, res) => {
 export const login = async (req, res) => {
   try {
     const { email, password } = req.body;
-    console.log('📝 Login attempt:', { email, password });
+    console.log('📝 Login attempt for email:', email);
 
     if (!email || !password) {
       return res.status(400).json({ message: 'Email and password are required' });
     }
 
-    const user = await User.findOne({ where: { email } });
-    console.log('👤 User found:', user ? 'Yes' : 'No');
+    const cleanEmail = email.toLowerCase().trim();
+    const user = await User.findOne({ where: { email: cleanEmail } });
 
     if (!user) {
+      console.log('❌ User not found with email:', cleanEmail);
       return res.status(401).json({ message: 'Invalid email or password' });
     }
 
-    // Direct password check (since password is plain text in DB for testing)
-    if (user.password !== password) {
-      console.log('❌ Password mismatch');
-      console.log('DB Password:', user.password);
-      console.log('Input Password:', password);
+    if (user.isBlocked) {
+      console.log('🚫 User account is blocked:', cleanEmail);
+      return res.status(403).json({ message: 'This account has been blocked. Please contact admin.' });
+    }
+
+    // Check password: support both bcrypt hashed passwords and direct strings
+    let isMatch = false;
+    if (typeof user.password === 'string' && (user.password.startsWith('$2a$') || user.password.startsWith('$2b$'))) {
+      isMatch = await bcrypt.compare(password, user.password);
+    } else {
+      isMatch = (user.password === password);
+    }
+
+    if (!isMatch) {
+      console.log('❌ Password mismatch for email:', cleanEmail);
       return res.status(401).json({ message: 'Invalid email or password' });
     }
 
-    console.log('✅ Login successful!');
+    console.log(`✅ Login successful: ${cleanEmail} (role: ${user.role})`);
 
     const token = generateToken(user.id);
 
@@ -84,6 +99,7 @@ export const login = async (req, res) => {
         name: user.name,
         email: user.email,
         role: user.role,
+        phone: user.phone,
       },
     });
   } catch (error) {

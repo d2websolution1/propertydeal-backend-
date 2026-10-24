@@ -23,6 +23,7 @@ import adminListingRoutes from './routes/adminListingRoutes.js';
 
 // Routes
 import authRoutes from './routes/authRoutes.js';
+import propertyRoutes from './routes/propertyRoutes.js';
 import adminUserRoutes from './routes/adminUserRoutes.js';
 import adminPropertyRoutes from './routes/adminPropertyRoutes.js';
 
@@ -50,9 +51,11 @@ import adminBulkMessageRoutes from './routes/adminBulkMessageRoutes.js';
 
 dotenv.config();
 
-// Model associations
-User.hasMany(Property, { foreignKey: 'ownerId', as: 'properties' });
-Property.belongsTo(User, { foreignKey: 'ownerId', as: 'owner' });
+// Model associations (ensure guarded)
+if (!User.associations.properties) {
+  User.hasMany(Property, { foreignKey: 'ownerId', as: 'properties' });
+  Property.belongsTo(User, { foreignKey: 'ownerId', as: 'owner' });
+}
 
 const app = express();
 
@@ -61,24 +64,21 @@ const allowedOrigins = [
   'http://localhost:3000',
   'http://localhost:5173',
   'http://localhost:5174',
+  'http://localhost:5175',
+  'http://127.0.0.1:5173',
+  'http://127.0.0.1:5174',
   'https://propertydeal-frontend.vercel.app', // production URL
 ];
 
 app.use(cors({
   origin: function (origin, callback) {
-    // allow requests with no origin (like mobile apps, curl, Postman)
     if (!origin) return callback(null, true);
-
-    // allow exact matches from the list above
-    if (allowedOrigins.includes(origin)) {
+    if (/^http:\/\/localhost(:\d+)?$/.test(origin) || /^http:\/\/127\.0\.0\.1(:\d+)?$/.test(origin) || allowedOrigins.includes(origin)) {
       return callback(null, true);
     }
-
-    // allow any Vercel preview deployment (e.g. propertydeal-frontend-xxxxx-princerajput5868.vercel.app)
     if (/^https:\/\/propertydeal-frontend.*\.vercel\.app$/.test(origin)) {
       return callback(null, true);
     }
-
     return callback(new Error('Not allowed by CORS'));
   },
   credentials: true,
@@ -92,6 +92,7 @@ app.get('/', (req, res) => {
 
 // ── Core Routes ──
 app.use('/api/auth', authRoutes);
+app.use('/api/properties', propertyRoutes);
 app.use('/api/admin/users', adminUserRoutes);
 app.use('/api/admin/properties', adminPropertyRoutes);
 
