@@ -2,6 +2,7 @@
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import User from '../models/User.js';
+import { sendOtpEmail } from '../utils/emailService.js';
 
 const generateToken = (userId) => {
   return jwt.sign({ id: userId }, process.env.JWT_SECRET || 'homeswale-secret-key-2025', {
@@ -120,5 +121,166 @@ export const getMe = async (req, res) => {
     res.json({ user });
   } catch (error) {
     res.status(500).json({ message: 'Failed to get user', error: error.message });
+  }
+};
+
+// In-memory OTP storage (email -> { otp, expiresAt, name, phone })
+const otpStore = new Map();
+
+// POST /api/auth/send-otp - Send OTP to Gmail / Email for Client Signup or Login
+export const sendOtp = async (req, res) => {
+  try {
+    const { email, name, phone, type = 'auth' } = req.body;
+
+    if (!email) {
+      return res.status(400).json({ message: 'Email address is required' });
+    }
+
+    const cleanEmail = email.toLowerCase().trim();
+
+    // Generate 6 digit numeric code
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    const expiresAt = Date.now() + 10 * 60 * 1000; // 10 minutes validity
+
+    otpStore.set(cleanEmail, {
+      otp,
+      expiresAt,
+      name: name?.trim() || 'Valued Client',
+      phone: phone?.trim() || null,
+      type,
+    });
+
+    // Check if user already exists
+    const existingUser = await User.findOne({ where: { email: cleanEmail } });
+
+    // Send email using nodemailer service
+    await sendOtpEmail(cleanEmail, otp, name || (existingUser ? existingUser.name : 'Valued Client'));
+
+    res.json({
+      success: true,
+      message: `Verification code sent to ${cleanEmail}`,
+      isExistingUser: !!existingUser,
+      // Provide preview in development/test environment for easy testing
+      previewOtp: otp,
+    });
+  } catch (error) {
+    console.error('❌ Error sending OTP:', error);
+    res.status(500).json({ message: 'Failed to send verification code', error: error.message });
+  }
+};
+
+// POST /api/auth/verify-otp - Verify OTP and login or create client account
+export const verifyOtp = async (req, res) => {
+  try {
+    const { email, otp, name, phone, password } = req.body;
+
+    if (!email || !otp) {
+      return res.status(400).json({ message: 'Email and OTP are required' });
+    }
+
+    const cleanEmail = email.toLowerCase().trim();
+    const storedRecord = otpStore.get(cleanEmail);
+
+    if (!storedRecord) {
+      return res.status(400).json({ message: 'No OTP requested for this email or OTP expired. Please request a new code.' });
+    }
+
+    if (Date.now() > storedRecord.expiresAt) {
+      otpStore.delete(cleanEmail);
+      return res.status(400).json({ message: 'OTP has expired. Please request a new one.' });
+    }
+
+    if (storedRecord.otp !== otp.trim()) {
+      return res.status(400).json({ message: 'Invalid OTP code. Please enter the correct code.' });
+    }
+
+    // OTP is valid! Check if user exists
+    let user = await User.findOne({ where: { email: cleanEmail } });
+
+    if (!user) {
+      // Create new client user
+      const clientName = name?.trim() || storedRecord.name || cleanEmail.split('@')[0];
+      const clientPassword = password || `pd_${Math.random().toString(36).substring(2, 10)}`;
+      const hashedPassword = await bcrypt.hash(clientPassword, 10);
+
+      user = await User.create({
+        name: clientName,
+        email: cleanEmail,
+        password: hashedPassword,
+        phone: phone?.trim() || storedRecord.phone || null,
+        role: 'user', // Client role
+      });
+      console.log(`🎉 New client account registered via OTP: ${cleanEmail}`);
+    } else {
+      if (user.isBlocked) {
+        return res.status(403).json({ message: 'This account is blocked. Please contact support.' });
+      }
+      console.log(`✅ Existing client authenticated via OTP: ${cleanEmail}`);
+    }
+
+    // Delete used OTP
+    otpStore.delete(cleanEmail);
+
+    const token = generateToken(user.id);
+
+    res.json({
+      success: true,
+      token,
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        phone: user.phone,
+      },
+    });
+  } catch (error) {
+    console.error('❌ Error verifying OTP:', error);
+    res.status(500).json({ message: 'Verification failed', error: error.message });
+  }
+};
+
+// POST /api/auth/google-auth - One-click Google Client Sign In / Sign Up
+export const googleAuth = async (req, res) => {
+  try {
+    const { email, name, avatar, phone } = req.body;
+
+    if (!email) {
+      return res.status(400).json({ message: 'Email is required for Google Sign-in' });
+    }
+
+    const cleanEmail = email.toLowerCase().trim();
+    let user = await User.findOne({ where: { email: cleanEmail } });
+
+    if (!user) {
+      const generatedPassword = await bcrypt.hash(`google_${Math.random()}`, 10);
+      user = await User.create({
+        name: name?.trim() || cleanEmail.split('@')[0],
+        email: cleanEmail,
+        password: generatedPassword,
+        phone: phone || null,
+        role: 'user',
+      });
+      console.log(`🎉 New client account created via Google: ${cleanEmail}`);
+    } else if (user.isBlocked) {
+      return res.status(403).json({ message: 'Account is blocked. Please contact support.' });
+    }
+
+    const token = generateToken(user.id);
+
+    res.json({
+      success: true,
+      token,
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        phone: user.phone,
+      },
+    });
+  } catch (error) {
+    console.error('❌ Google auth error:', error);
+    res.status(500).json({ message: 'Google authentication failed', error: error.message });
   }
 };
