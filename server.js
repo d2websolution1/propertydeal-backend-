@@ -67,8 +67,8 @@ const allowedOrigins = [
   'http://localhost:5175',
   'http://127.0.0.1:5173',
   'http://127.0.0.1:5174',
-  'https://propertydeal-frontend.vercel.app', // production URL
-];
+  process.env.FRONTEND_URL,
+].filter(Boolean);
 
 app.use(cors({
   origin: function (origin, callback) {
@@ -76,7 +76,8 @@ app.use(cors({
     if (/^http:\/\/localhost(:\d+)?$/.test(origin) || /^http:\/\/127\.0\.0\.1(:\d+)?$/.test(origin) || allowedOrigins.includes(origin)) {
       return callback(null, true);
     }
-    if (/^https:\/\/propertydeal-frontend.*\.vercel\.app$/.test(origin)) {
+    // Allow any Vercel deployment (preview or production)
+    if (/^https:\/\/.*\.vercel\.app$/.test(origin)) {
       return callback(null, true);
     }
     return callback(new Error('Not allowed by CORS'));

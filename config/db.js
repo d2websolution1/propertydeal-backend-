@@ -9,19 +9,24 @@ dotenv.config();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const isSqlite = process.env.DB_DIALECT === 'sqlite' || !process.env.DB_HOST || process.env.DB_HOST.includes('supabase.com');
+const isPostgres = Boolean(process.env.DATABASE_URL || (process.env.DB_HOST && process.env.DB_DIALECT !== 'sqlite'));
 
 let sequelize;
 
-if (isSqlite) {
-  const dbPath = path.resolve(__dirname, '../database.sqlite');
-  console.log(`📦 Using SQLite Database at: ${dbPath}`);
-  sequelize = new Sequelize({
-    dialect: 'sqlite',
-    storage: dbPath,
+if (process.env.DATABASE_URL) {
+  console.log(`📦 Connecting to Cloud PostgreSQL via DATABASE_URL`);
+  sequelize = new Sequelize(process.env.DATABASE_URL, {
+    dialect: 'postgres',
+    dialectOptions: {
+      ssl: {
+        require: true,
+        rejectUnauthorized: false,
+      },
+    },
     logging: false,
   });
-} else {
+} else if (isPostgres) {
+  console.log(`📦 Connecting to PostgreSQL at ${process.env.DB_HOST}:${process.env.DB_PORT || 5432}`);
   sequelize = new Sequelize(
     process.env.DB_NAME,
     process.env.DB_USER,
@@ -39,6 +44,14 @@ if (isSqlite) {
       logging: false,
     }
   );
+} else {
+  const dbPath = path.resolve(__dirname, '../database.sqlite');
+  console.log(`📦 Using SQLite Database at: ${dbPath}`);
+  sequelize = new Sequelize({
+    dialect: 'sqlite',
+    storage: dbPath,
+    logging: false,
+  });
 }
 
 const connectDB = async () => {
