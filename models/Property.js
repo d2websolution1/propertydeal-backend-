@@ -1,76 +1,89 @@
 // models/Property.js
-import { DataTypes } from 'sequelize';
-import sequelize from '../config/db.js';
+import mongoose from 'mongoose';
+import { applyMongoPlugin } from '../config/mongoPlugin.js';
 
-const Property = sequelize.define('Property', {
+const propertySchema = new mongoose.Schema({
   title: {
-    type: DataTypes.STRING,
-    allowNull: false,
+    type: String,
+    required: true,
+    trim: true,
   },
   description: {
-    type: DataTypes.TEXT,
-    allowNull: true,
+    type: String,
+    default: '',
   },
   price: {
-    type: DataTypes.DECIMAL(14, 2),
-    allowNull: false,
+    type: Number,
+    required: true,
   },
   propertyType: {
-    type: DataTypes.STRING,
-    allowNull: false,
+    type: String,
+    required: true,
   },
   listingType: {
-    type: DataTypes.ENUM('sale', 'rent'),
-    defaultValue: 'sale',
+    type: String,
+    enum: ['sale', 'rent'],
+    default: 'sale',
   },
   city: {
-    type: DataTypes.STRING,
-    allowNull: false,
+    type: String,
+    required: true,
   },
   locality: {
-    type: DataTypes.STRING,
-    allowNull: true,
+    type: String,
+    default: '',
   },
   bhk: {
-    type: DataTypes.STRING,
-    allowNull: true,
+    type: String,
+    default: '',
   },
   areaSqft: {
-    type: DataTypes.INTEGER,
-    allowNull: true,
+    type: Number,
+    default: null,
   },
   images: {
-    type: DataTypes.JSON,
-    defaultValue: [],
+    type: [String],
+    default: [],
   },
   status: {
-    type: DataTypes.ENUM('pending', 'approved', 'rejected'),
-    defaultValue: 'pending',
+    type: String,
+    enum: ['pending', 'approved', 'rejected'],
+    default: 'pending',
   },
   rejectionReason: {
-    type: DataTypes.STRING,
-    allowNull: true,
+    type: String,
+    default: null,
   },
   isFeatured: {
-    type: DataTypes.BOOLEAN,
-    defaultValue: false,
+    type: Boolean,
+    default: false,
   },
   isVerified: {
-    type: DataTypes.BOOLEAN,
-    defaultValue: false,
+    type: Boolean,
+    default: false,
   },
   uniqueCode: {
-    type: DataTypes.STRING,
-    unique: true,
-    allowNull: true,
+    type: String,
+    sparse: true,
   },
-  ownerId: {
-    type: DataTypes.INTEGER,
-    allowNull: false,
+  owner: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: false,
   },
 }, {
-  tableName: 'properties',
-  freezeTableName: true,
+  timestamps: true,
+  collection: 'properties',
 });
 
+// Support ownerId virtual for backward compatibility
+propertySchema.virtual('ownerId').get(function () {
+  return this.owner ? this.owner.toString() : null;
+}).set(function (val) {
+  this.owner = val;
+});
+
+applyMongoPlugin(propertySchema);
+
+const Property = mongoose.models.Property || mongoose.model('Property', propertySchema);
 export default Property;

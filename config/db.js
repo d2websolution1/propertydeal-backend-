@@ -1,112 +1,50 @@
 // config/db.js
-import { Sequelize } from 'sequelize';
+import mongoose from 'mongoose';
 import dotenv from 'dotenv';
-import path from 'path';
-import { fileURLToPath } from 'url';
+import bcrypt from 'bcryptjs';
+
+// Pre-load all models
+import User from '../models/User.js';
+import Property from '../models/Property.js';
+import HomeSection from '../models/HomeSection.js';
+import BlogPost from '../models/BlogPost.js';
+import SeoSetting from '../models/SeoSetting.js';
+import Advertisement from '../models/Advertisement.js';
+import CmsPage from '../models/CmsPage.js';
+import EmailTemplate from '../models/EmailTemplate.js';
+import PopupBanner from '../models/PopupBanner.js';
+import BulkMessageLog from '../models/BulkMessageLog.js';
+import Enquiry from '../models/Enquiry.js';
 
 dotenv.config();
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-const isPostgres = Boolean(process.env.DATABASE_URL || (process.env.DB_HOST && process.env.DB_DIALECT !== 'sqlite'));
-
-let sequelize;
-
-if (process.env.DATABASE_URL) {
-  console.log(`📦 Connecting to Cloud PostgreSQL via DATABASE_URL...`);
-  // Check if SSL should be disabled (e.g. Render internal network) or enabled (cloud providers)
-  const isLocal = process.env.DATABASE_URL.includes('localhost') || process.env.DATABASE_URL.includes('127.0.0.1');
-  const isRenderInternal = process.env.DATABASE_URL.includes('dpg-') && !process.env.DATABASE_URL.includes('.render.com');
-
-  const dialectOptions = (!isLocal && !isRenderInternal) ? {
-    ssl: {
-      require: true,
-      rejectUnauthorized: false,
-    },
-  } : {};
-
-  sequelize = new Sequelize(process.env.DATABASE_URL, {
-    dialect: 'postgres',
-    dialectOptions,
-    logging: false,
-  });
-} else if (isPostgres) {
-  console.log(`📦 Connecting to PostgreSQL at ${process.env.DB_HOST}:${process.env.DB_PORT || 5432}`);
-  sequelize = new Sequelize(
-    process.env.DB_NAME,
-    process.env.DB_USER,
-    process.env.DB_PASSWORD,
-    {
-      host: process.env.DB_HOST,
-      port: process.env.DB_PORT || 5432,
-      dialect: 'postgres',
-      dialectOptions: {
-        ssl: {
-          require: true,
-          rejectUnauthorized: false,
-        },
-      },
-      logging: false,
-    }
-  );
-} else {
-  const isCloudEnvironment = Boolean(process.env.RENDER || process.env.NODE_ENV === 'production');
-  if (isCloudEnvironment) {
-    console.warn('⚠️ WARNING: DATABASE_URL is not set in environment variables!');
-    console.warn('👉 Please configure DATABASE_URL in Render Dashboard -> Environment to use PostgreSQL.');
-  }
-
-  const dbPath = path.resolve(__dirname, '../database.sqlite');
-  console.log(`📦 Using SQLite Database at: ${dbPath}`);
-  sequelize = new Sequelize({
-    dialect: 'sqlite',
-    storage: dbPath,
-    logging: false,
-  });
-}
+const mongoUri = process.env.MONGODB_URI || process.env.MONGO_URI || process.env.DATABASE_URL;
 
 const connectDB = async () => {
+  if (!mongoUri || (!mongoUri.startsWith('mongodb://') && !mongoUri.startsWith('mongodb+srv://'))) {
+    console.warn('\n⚠️ [MONGODB CONFIGURATION REQUIRED]');
+    console.warn('👉 Please set MONGODB_URI in your environment variables (.env or Render Dashboard).');
+    console.warn('   Example: mongodb+srv://<username>:<password>@cluster0.xxxxx.mongodb.net/propertylisting?retryWrites=true&w=majority\n');
+    return;
+  }
+
   try {
-    await sequelize.authenticate();
-    const dialectName = sequelize.getDialect();
-    console.log(`✅ Database connected successfully (${dialectName === 'sqlite' ? 'SQLite' : 'PostgreSQL'})`);
+    console.log(`📦 Connecting to MongoDB Atlas...`);
+    const conn = await mongoose.connect(mongoUri);
+    console.log(`✅ MongoDB Atlas connected successfully: ${conn.connection.host} (DB: ${conn.connection.name})`);
 
-    // Pre-import all models so sequelize knows about all tables before sync
-    const { default: User } = await import('../models/User.js');
-    const { default: Property } = await import('../models/Property.js');
-    await import('../models/HomeSection.js');
-    await import('../models/BlogPost.js');
-    await import('../models/SeoSetting.js');
-    await import('../models/Advertisement.js');
-    await import('../models/CmsPage.js');
-    await import('../models/EmailTemplate.js');
-    await import('../models/PopupBanner.js');
-    await import('../models/BulkMessageLog.js');
-
-    // Model associations
-    if (!User.associations.properties) {
-      User.hasMany(Property, { foreignKey: 'ownerId', as: 'properties' });
-      Property.belongsTo(User, { foreignKey: 'ownerId', as: 'owner' });
-    }
-
-    await sequelize.sync();
-    console.log('✅ All tables synced successfully');
-
-    // Run auto-seeder to guarantee Admin and properties exist
-    await seedInitialData(User, Property);
+    // Run auto-seeder to guarantee Admin and sample properties exist
+    await seedInitialData();
   } catch (error) {
-    console.error('❌ Database connection error:', error.message);
+    console.error('❌ MongoDB Atlas connection error:', error.message);
   }
 };
 
-async function seedInitialData(User, Property) {
+async function seedInitialData() {
   try {
-    const bcrypt = (await import('bcryptjs')).default;
-
     // 1. Ensure PropertyDeal Admin exists
     const primaryAdminEmail = 'admin@propertydeal.com';
-    let admin = await User.findOne({ where: { email: primaryAdminEmail } });
+    let admin = await User.findOne({ email: primaryAdminEmail });
     if (!admin) {
       const hashedPassword = await bcrypt.hash('admin123', 10);
       admin = await User.create({
@@ -118,14 +56,11 @@ async function seedInitialData(User, Property) {
         isBlocked: false,
       });
       console.log(`⭐ Seeded primary admin: ${primaryAdminEmail} (password: admin123)`);
-    } else {
-      admin.name = 'PropertyDeal Admin';
-      await admin.save();
     }
 
-    // Also support backup admin email
+    // Secondary admin
     const secondaryAdminEmail = 'admin@homeswale.com';
-    const secAdmin = await User.findOne({ where: { email: secondaryAdminEmail } });
+    const secAdmin = await User.findOne({ email: secondaryAdminEmail });
     if (!secAdmin) {
       const hashedPassword = await bcrypt.hash('admin123', 10);
       await User.create({
@@ -139,9 +74,9 @@ async function seedInitialData(User, Property) {
     }
 
     // 2. Ensure initial properties exist
-    const count = await Property.count();
+    const count = await Property.countDocuments();
     if (count === 0 && admin) {
-      console.log('🌱 Seeding initial properties...');
+      console.log('🌱 Seeding initial properties to MongoDB Atlas...');
       const sampleProperties = [
         {
           title: '3 BHK Ultra Luxury Apartment - Supertech Ecovillage',
@@ -161,7 +96,7 @@ async function seedInitialData(User, Property) {
           isFeatured: true,
           isVerified: true,
           uniqueCode: 'HW-1001',
-          ownerId: admin.id,
+          owner: admin._id,
         },
         {
           title: '4 BHK Luxury Sky Residence - Trump Towers Noida',
@@ -181,7 +116,7 @@ async function seedInitialData(User, Property) {
           isFeatured: true,
           isVerified: true,
           uniqueCode: 'HW-1002',
-          ownerId: admin.id,
+          owner: admin._id,
         },
         {
           title: '2 BHK Fully Furnished Flat on Rent - Gaur City 2',
@@ -201,7 +136,7 @@ async function seedInitialData(User, Property) {
           isFeatured: true,
           isVerified: true,
           uniqueCode: 'HW-1003',
-          ownerId: admin.id,
+          owner: admin._id,
         },
         {
           title: 'Commercial Retail Shop - Gaur City Mall',
@@ -220,7 +155,7 @@ async function seedInitialData(User, Property) {
           isFeatured: true,
           isVerified: true,
           uniqueCode: 'HW-1004',
-          ownerId: admin.id,
+          owner: admin._id,
         },
         {
           title: 'Residential Plot on Yamuna Expressway (YEIDA)',
@@ -239,7 +174,7 @@ async function seedInitialData(User, Property) {
           isFeatured: true,
           isVerified: true,
           uniqueCode: 'HW-1005',
-          ownerId: admin.id,
+          owner: admin._id,
         },
         {
           title: 'Girls & Boys PG with 3 Meals - Techzone 4',
@@ -258,19 +193,19 @@ async function seedInitialData(User, Property) {
           isFeatured: false,
           isVerified: true,
           uniqueCode: 'HW-1006',
-          ownerId: admin.id,
-        }
+          owner: admin._id,
+        },
       ];
 
       for (const p of sampleProperties) {
         await Property.create(p);
       }
-      console.log('✅ Seeded sample properties successfully!');
+      console.log('✅ Seeded sample properties to MongoDB Atlas successfully!');
     }
   } catch (err) {
     console.error('⚠️ Seeding error:', err.message);
   }
 }
 
-export default sequelize;
+export default mongoose;
 export { connectDB };

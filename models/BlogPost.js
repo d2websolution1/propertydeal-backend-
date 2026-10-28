@@ -1,58 +1,62 @@
 // models/BlogPost.js
-import { DataTypes } from 'sequelize';
-import sequelize from '../config/db.js';
+import mongoose from 'mongoose';
+import { applyMongoPlugin } from '../config/mongoPlugin.js';
 
-const BlogPost = sequelize.define('BlogPost', {
+const blogPostSchema = new mongoose.Schema({
   title: {
-    type: DataTypes.STRING,
-    allowNull: false,
+    type: String,
+    required: true,
+    trim: true,
   },
   slug: {
-    type: DataTypes.STRING,
-    allowNull: false,
+    type: String,
+    required: true,
     unique: true,
+    trim: true,
   },
   excerpt: {
-    type: DataTypes.STRING,
-    allowNull: true,
+    type: String,
+    default: '',
   },
   content: {
-    type: DataTypes.TEXT,
-    allowNull: false,
+    type: String,
+    required: true,
   },
   coverImage: {
-    type: DataTypes.STRING,
-    allowNull: true,
+    type: String,
+    default: '',
   },
   category: {
-    type: DataTypes.STRING,
-    allowNull: true,
-    defaultValue: 'General',
+    type: String,
+    default: 'General',
   },
   tags: {
-    type: DataTypes.JSON,
-    defaultValue: [],
+    type: [String],
+    default: [],
   },
   author: {
-    type: DataTypes.STRING,
-    allowNull: true,
-    defaultValue: 'Admin',
+    type: String,
+    default: 'Admin',
   },
   status: {
-    type: DataTypes.ENUM('draft', 'published'),
-    defaultValue: 'draft',
+    type: String,
+    enum: ['draft', 'published'],
+    default: 'draft',
   },
   publishedAt: {
-    type: DataTypes.DATE,
-    allowNull: true,
+    type: Date,
+    default: null,
   },
   views: {
-    type: DataTypes.INTEGER,
-    defaultValue: 0,
+    type: Number,
+    default: 0,
   },
 }, {
-  tableName: 'blogposts',
-  freezeTableName: true,
+  timestamps: true,
+  collection: 'blogposts',
 });
 
+applyMongoPlugin(blogPostSchema);
+
+const BlogPost = mongoose.models.BlogPost || mongoose.model('BlogPost', blogPostSchema);
 export default BlogPost;

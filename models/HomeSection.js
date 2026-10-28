@@ -1,41 +1,45 @@
 // models/HomeSection.js
-import { DataTypes } from 'sequelize';
-import sequelize from '../config/db.js';
+import mongoose from 'mongoose';
+import { applyMongoPlugin } from '../config/mongoPlugin.js';
 
-const HomeSection = sequelize.define('HomeSection', {
+const homeSectionSchema = new mongoose.Schema({
   sectionKey: {
-    type: DataTypes.STRING,
-    allowNull: false,
+    type: String,
+    required: true,
     unique: true,
+    trim: true,
   },
   page: {
-    type: DataTypes.STRING,
-    allowNull: false,
-    defaultValue: 'homepage',
+    type: String,
+    required: true,
+    default: 'homepage',
   },
   title: {
-    type: DataTypes.STRING,
-    allowNull: false,
+    type: String,
+    required: true,
   },
   subtitle: {
-    type: DataTypes.STRING,
-    allowNull: true,
+    type: String,
+    default: '',
   },
   items: {
-    type: DataTypes.JSON,
-    defaultValue: [],
+    type: mongoose.Schema.Types.Mixed,
+    default: [],
   },
   displayOrder: {
-    type: DataTypes.INTEGER,
-    defaultValue: 0,
+    type: Number,
+    default: 0,
   },
   isActive: {
-    type: DataTypes.BOOLEAN,
-    defaultValue: true,
+    type: Boolean,
+    default: true,
   },
 }, {
-  tableName: 'homesections',
-  freezeTableName: true,
+  timestamps: true,
+  collection: 'homesections',
 });
 
+applyMongoPlugin(homeSectionSchema);
+
+const HomeSection = mongoose.models.HomeSection || mongoose.model('HomeSection', homeSectionSchema);
 export default HomeSection;

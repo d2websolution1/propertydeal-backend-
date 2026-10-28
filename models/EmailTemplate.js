@@ -1,19 +1,36 @@
-import { DataTypes } from 'sequelize';
-import sequelize from '../config/db.js';
+// models/EmailTemplate.js
+import mongoose from 'mongoose';
+import { applyMongoPlugin } from '../config/mongoPlugin.js';
 
-const EmailTemplate = sequelize.define('EmailTemplate', {
+const emailTemplateSchema = new mongoose.Schema({
   templateKey: {
-    type: DataTypes.STRING,
-    allowNull: false,
+    type: String,
+    required: true,
     unique: true,
+    trim: true,
   },
-  name: { type: DataTypes.STRING, allowNull: false },
-  subject: { type: DataTypes.STRING, allowNull: false },
-  body: { type: DataTypes.TEXT, allowNull: false },
-  isActive: { type: DataTypes.BOOLEAN, defaultValue: true },
+  name: {
+    type: String,
+    required: true,
+  },
+  subject: {
+    type: String,
+    required: true,
+  },
+  body: {
+    type: String,
+    required: true,
+  },
+  isActive: {
+    type: Boolean,
+    default: true,
+  },
 }, {
-  tableName: 'emailtemplates',
-  freezeTableName: true,
+  timestamps: true,
+  collection: 'emailtemplates',
 });
 
+applyMongoPlugin(emailTemplateSchema);
+
+const EmailTemplate = mongoose.models.EmailTemplate || mongoose.model('EmailTemplate', emailTemplateSchema);
 export default EmailTemplate;

@@ -1,21 +1,47 @@
-import { DataTypes } from 'sequelize';
-import sequelize from '../config/db.js';
+// models/PopupBanner.js
+import mongoose from 'mongoose';
+import { applyMongoPlugin } from '../config/mongoPlugin.js';
 
-const PopupBanner = sequelize.define('PopupBanner', {
-  title: { type: DataTypes.STRING, allowNull: false },
-  image: { type: DataTypes.STRING, allowNull: false },
-  link: { type: DataTypes.STRING, allowNull: true },
-  showOnPages: {
-    type: DataTypes.JSON,
-    defaultValue: ['homepage'],
+const popupBannerSchema = new mongoose.Schema({
+  title: {
+    type: String,
+    required: true,
+    trim: true,
   },
-  delaySeconds: { type: DataTypes.INTEGER, defaultValue: 3 },
-  startDate: { type: DataTypes.DATEONLY, allowNull: true },
-  endDate: { type: DataTypes.DATEONLY, allowNull: true },
-  isActive: { type: DataTypes.BOOLEAN, defaultValue: true },
+  image: {
+    type: String,
+    required: true,
+  },
+  link: {
+    type: String,
+    default: '',
+  },
+  showOnPages: {
+    type: [String],
+    default: ['homepage'],
+  },
+  delaySeconds: {
+    type: Number,
+    default: 3,
+  },
+  startDate: {
+    type: Date,
+    default: null,
+  },
+  endDate: {
+    type: Date,
+    default: null,
+  },
+  isActive: {
+    type: Boolean,
+    default: true,
+  },
 }, {
-  tableName: 'popupbanners',
-  freezeTableName: true,
+  timestamps: true,
+  collection: 'popupbanners',
 });
 
+applyMongoPlugin(popupBannerSchema);
+
+const PopupBanner = mongoose.models.PopupBanner || mongoose.model('PopupBanner', popupBannerSchema);
 export default PopupBanner;

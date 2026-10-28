@@ -1,36 +1,43 @@
 // models/User.js
-import { DataTypes } from 'sequelize';
-import sequelize from '../config/db.js';
+import mongoose from 'mongoose';
+import { applyMongoPlugin } from '../config/mongoPlugin.js';
 
-const User = sequelize.define('User', {
+const userSchema = new mongoose.Schema({
   name: {
-    type: DataTypes.STRING,
-    allowNull: false,
+    type: String,
+    required: true,
+    trim: true,
   },
   email: {
-    type: DataTypes.STRING,
-    allowNull: false,
+    type: String,
+    required: true,
     unique: true,
+    trim: true,
+    lowercase: true,
   },
   password: {
-    type: DataTypes.STRING,
-    allowNull: false,
+    type: String,
+    required: true,
   },
   role: {
-    type: DataTypes.ENUM('user', 'vendor', 'admin'),
-    defaultValue: 'user',
+    type: String,
+    enum: ['user', 'vendor', 'admin'],
+    default: 'user',
   },
   phone: {
-    type: DataTypes.STRING,
-    allowNull: true,
+    type: String,
+    default: null,
   },
   isBlocked: {
-    type: DataTypes.BOOLEAN,
-    defaultValue: false,
+    type: Boolean,
+    default: false,
   },
 }, {
-  tableName: 'users',
-  freezeTableName: true,
+  timestamps: true,
+  collection: 'users',
 });
 
+applyMongoPlugin(userSchema);
+
+const User = mongoose.models.User || mongoose.model('User', userSchema);
 export default User;

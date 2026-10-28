@@ -51,12 +51,6 @@ import adminBulkMessageRoutes from './routes/adminBulkMessageRoutes.js';
 
 dotenv.config();
 
-// Model associations (ensure guarded)
-if (!User.associations.properties) {
-  User.hasMany(Property, { foreignKey: 'ownerId', as: 'properties' });
-  Property.belongsTo(User, { foreignKey: 'ownerId', as: 'owner' });
-}
-
 const app = express();
 
 // ── CORS Config ──

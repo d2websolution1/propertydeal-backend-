@@ -1,36 +1,41 @@
 // models/CmsPage.js
-import { DataTypes } from 'sequelize';
-import sequelize from '../config/db.js';
+import mongoose from 'mongoose';
+import { applyMongoPlugin } from '../config/mongoPlugin.js';
 
-const CmsPage = sequelize.define('CmsPage', {
+const cmsPageSchema = new mongoose.Schema({
   title: {
-    type: DataTypes.STRING,
-    allowNull: false,
+    type: String,
+    required: true,
+    trim: true,
   },
   slug: {
-    type: DataTypes.STRING,
-    allowNull: false,
+    type: String,
+    required: true,
     unique: true,
+    trim: true,
   },
   content: {
-    type: DataTypes.TEXT,
-    allowNull: false,
+    type: String,
+    required: true,
   },
   metaTitle: {
-    type: DataTypes.STRING,
-    allowNull: true,
+    type: String,
+    default: '',
   },
   metaDescription: {
-    type: DataTypes.STRING(500),
-    allowNull: true,
+    type: String,
+    default: '',
   },
   isPublished: {
-    type: DataTypes.BOOLEAN,
-    defaultValue: true,
+    type: Boolean,
+    default: true,
   },
 }, {
-  tableName: 'cmspages',
-  freezeTableName: true,
+  timestamps: true,
+  collection: 'cmspages',
 });
 
+applyMongoPlugin(cmsPageSchema);
+
+const CmsPage = mongoose.models.CmsPage || mongoose.model('CmsPage', cmsPageSchema);
 export default CmsPage;

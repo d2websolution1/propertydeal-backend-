@@ -1,61 +1,65 @@
 // models/Enquiry.js
-import { DataTypes } from 'sequelize';
-import sequelize from '../config/db.js';
+import mongoose from 'mongoose';
+import { applyMongoPlugin } from '../config/mongoPlugin.js';
 
-const Enquiry = sequelize.define('Enquiry', {
-  id: {
-    type: DataTypes.INTEGER,
-    primaryKey: true,
-    autoIncrement: true
+const enquirySchema = new mongoose.Schema({
+  user: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: false,
   },
-  userId: {
-    type: DataTypes.INTEGER,
-    allowNull: false,
-    references: {
-      model: 'users',
-      key: 'id'
-    }
-  },
-  propertyId: {
-    type: DataTypes.INTEGER,
-    allowNull: false,
-    references: {
-      model: 'properties',
-      key: 'id'
-    }
+  property: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Property',
+    required: false,
   },
   message: {
-    type: DataTypes.TEXT,
-    allowNull: false
+    type: String,
+    required: true,
   },
   status: {
-    type: DataTypes.ENUM('new', 'contacted', 'in_progress', 'closed'),
-    defaultValue: 'new'
+    type: String,
+    enum: ['new', 'contacted', 'in_progress', 'closed'],
+    default: 'new',
   },
   userName: {
-    type: DataTypes.STRING,
-    allowNull: false
+    type: String,
+    required: true,
   },
   userEmail: {
-    type: DataTypes.STRING,
-    allowNull: false
+    type: String,
+    required: true,
   },
   userPhone: {
-    type: DataTypes.STRING,
-    allowNull: true
+    type: String,
+    default: null,
   },
   propertyTitle: {
-    type: DataTypes.STRING,
-    allowNull: false
+    type: String,
+    required: true,
   },
   propertyLocation: {
-    type: DataTypes.STRING,
-    allowNull: true
-  }
+    type: String,
+    default: '',
+  },
 }, {
-  tableName: 'enquiries',
-  freezeTableName: true,
-  timestamps: true
+  timestamps: true,
+  collection: 'enquiries',
 });
 
+enquirySchema.virtual('userId').get(function () {
+  return this.user ? this.user.toString() : null;
+}).set(function (val) {
+  this.user = val;
+});
+
+enquirySchema.virtual('propertyId').get(function () {
+  return this.property ? this.property.toString() : null;
+}).set(function (val) {
+  this.property = val;
+});
+
+applyMongoPlugin(enquirySchema);
+
+const Enquiry = mongoose.models.Enquiry || mongoose.model('Enquiry', enquirySchema);
 export default Enquiry;

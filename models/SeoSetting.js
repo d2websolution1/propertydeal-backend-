@@ -1,40 +1,44 @@
 // models/SeoSetting.js
-import { DataTypes } from 'sequelize';
-import sequelize from '../config/db.js';
+import mongoose from 'mongoose';
+import { applyMongoPlugin } from '../config/mongoPlugin.js';
 
-const SeoSetting = sequelize.define('SeoSetting', {
+const seoSettingSchema = new mongoose.Schema({
   pageKey: {
-    type: DataTypes.STRING,
-    allowNull: false,
+    type: String,
+    required: true,
     unique: true,
+    trim: true,
   },
   pageLabel: {
-    type: DataTypes.STRING,
-    allowNull: false,
+    type: String,
+    required: true,
   },
   metaTitle: {
-    type: DataTypes.STRING,
-    allowNull: true,
+    type: String,
+    default: '',
   },
   metaDescription: {
-    type: DataTypes.STRING(500),
-    allowNull: true,
+    type: String,
+    default: '',
   },
   metaKeywords: {
-    type: DataTypes.STRING,
-    allowNull: true,
+    type: String,
+    default: '',
   },
   ogImage: {
-    type: DataTypes.STRING,
-    allowNull: true,
+    type: String,
+    default: '',
   },
   canonicalUrl: {
-    type: DataTypes.STRING,
-    allowNull: true,
+    type: String,
+    default: '',
   },
 }, {
-  tableName: 'seosettings',
-  freezeTableName: true,
+  timestamps: true,
+  collection: 'seosettings',
 });
 
+applyMongoPlugin(seoSettingSchema);
+
+const SeoSetting = mongoose.models.SeoSetting || mongoose.model('SeoSetting', seoSettingSchema);
 export default SeoSetting;
