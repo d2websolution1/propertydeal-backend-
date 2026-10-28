@@ -17,6 +17,7 @@ import PopupBanner from './models/PopupBanner.js';
 import BulkMessageLog from './models/BulkMessageLog.js';
 // server.js - Add new routes
 import adminListingRoutes from './routes/adminListingRoutes.js';
+import adminDashboardRoutes from './routes/adminDashboardRoutes.js';
 
 // ... existing routes ...
 
@@ -90,6 +91,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/properties', propertyRoutes);
 app.use('/api/admin/users', adminUserRoutes);
 app.use('/api/admin/properties', adminPropertyRoutes);
+app.use('/api/admin/dashboard', adminDashboardRoutes);
 
 // ── Homepage / Rent / other pages content ──
 app.use('/api/home-sections', homeSectionRoutes);
