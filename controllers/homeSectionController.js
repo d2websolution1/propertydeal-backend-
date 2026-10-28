@@ -125,6 +125,7 @@ export const updateSection = async (req, res) => {
     if (isActive !== undefined) section.isActive = isActive;
     if (page !== undefined) section.page = page;
 
+    section.markModified('items');
     await section.save();
     res.json({ ...section.toJSON(), items: parseItems(section.items) });
   } catch (error) {
@@ -154,6 +155,7 @@ export const addItem = async (req, res) => {
     const currentItems = parseItems(section.items);
     const newItem = { id: Date.now().toString(), ...req.body };
     section.items = [...currentItems, newItem];
+    section.markModified('items');
     await section.save();
 
     res.status(201).json({ ...section.toJSON(), items: parseItems(section.items) });
@@ -169,8 +171,9 @@ export const updateItem = async (req, res) => {
 
     const currentItems = parseItems(section.items);
     section.items = currentItems.map((item) =>
-      item.id === req.params.itemId ? { ...item, ...req.body, id: item.id } : item
+      String(item.id) === String(req.params.itemId) ? { ...item, ...req.body, id: item.id } : item
     );
+    section.markModified('items');
     await section.save();
 
     res.json({ ...section.toJSON(), items: parseItems(section.items) });
@@ -186,12 +189,31 @@ export const deleteItem = async (req, res) => {
 
     const currentItems = parseItems(section.items);
     section.items = currentItems.filter(
-      (item) => item.id && item.id !== req.params.itemId
+      (item) => String(item.id) !== String(req.params.itemId)
     );
+    section.markModified('items');
     await section.save();
 
     res.json({ ...section.toJSON(), items: parseItems(section.items) });
   } catch (error) {
     res.status(500).json({ message: 'Failed to delete item', error: error.message });
+  }
+};
+
+export const restoreDefaultSections = async (req, res) => {
+  try {
+    const { seedHomeSections } = await import('../config/db.js');
+    await seedHomeSections();
+    const sections = await HomeSection.findAll({
+      order: [['displayOrder', 'ASC'], ['createdAt', 'DESC']]
+    });
+    const normalized = sections.map((s) => ({
+      ...s.toJSON(),
+      items: parseItems(s.items),
+      page: s.page || 'homepage'
+    }));
+    res.json({ success: true, message: 'All default page sections verified and restored!', sections: normalized });
+  } catch (error) {
+    res.status(500).json({ message: 'Failed to restore default sections', error: error.message });
   }
 };

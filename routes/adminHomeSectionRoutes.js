@@ -8,7 +8,8 @@ import {
   addItem,
   updateItem,
   deleteItem,
-  getSectionsByPage
+  getSectionsByPage,
+  restoreDefaultSections
 } from '../controllers/homeSectionController.js';
 import { protect, adminOnly } from '../middleware/authMiddleware.js';
 
@@ -19,6 +20,7 @@ router.use(protect, adminOnly);
 
 // Section routes
 router.get('/', getAllSectionsAdmin);
+router.post('/seed-defaults', restoreDefaultSections);
 router.get('/page/:page', getSectionsByPage);
 router.post('/', createSection);
 router.put('/:id', updateSection);
