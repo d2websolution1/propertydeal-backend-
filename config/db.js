@@ -14,15 +14,21 @@ const isPostgres = Boolean(process.env.DATABASE_URL || (process.env.DB_HOST && p
 let sequelize;
 
 if (process.env.DATABASE_URL) {
-  console.log(`📦 Connecting to Cloud PostgreSQL via DATABASE_URL`);
+  console.log(`📦 Connecting to Cloud PostgreSQL via DATABASE_URL...`);
+  // Check if SSL should be disabled (e.g. Render internal network) or enabled (cloud providers)
+  const isLocal = process.env.DATABASE_URL.includes('localhost') || process.env.DATABASE_URL.includes('127.0.0.1');
+  const isRenderInternal = process.env.DATABASE_URL.includes('dpg-') && !process.env.DATABASE_URL.includes('.render.com');
+
+  const dialectOptions = (!isLocal && !isRenderInternal) ? {
+    ssl: {
+      require: true,
+      rejectUnauthorized: false,
+    },
+  } : {};
+
   sequelize = new Sequelize(process.env.DATABASE_URL, {
     dialect: 'postgres',
-    dialectOptions: {
-      ssl: {
-        require: true,
-        rejectUnauthorized: false,
-      },
-    },
+    dialectOptions,
     logging: false,
   });
 } else if (isPostgres) {
@@ -45,6 +51,12 @@ if (process.env.DATABASE_URL) {
     }
   );
 } else {
+  const isCloudEnvironment = Boolean(process.env.RENDER || process.env.NODE_ENV === 'production');
+  if (isCloudEnvironment) {
+    console.warn('⚠️ WARNING: DATABASE_URL is not set in environment variables!');
+    console.warn('👉 Please configure DATABASE_URL in Render Dashboard -> Environment to use PostgreSQL.');
+  }
+
   const dbPath = path.resolve(__dirname, '../database.sqlite');
   console.log(`📦 Using SQLite Database at: ${dbPath}`);
   sequelize = new Sequelize({
@@ -57,7 +69,8 @@ if (process.env.DATABASE_URL) {
 const connectDB = async () => {
   try {
     await sequelize.authenticate();
-    console.log(`✅ Database connected successfully (${isSqlite ? 'SQLite' : 'PostgreSQL'})`);
+    const dialectName = sequelize.getDialect();
+    console.log(`✅ Database connected successfully (${dialectName === 'sqlite' ? 'SQLite' : 'PostgreSQL'})`);
 
     // Pre-import all models so sequelize knows about all tables before sync
     const { default: User } = await import('../models/User.js');
