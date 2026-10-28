@@ -109,6 +109,14 @@ export function applyMongoPlugin(schema) {
     },
   });
 
+  // Query middleware to seamlessly handle Sequelize { where: { ... } }
+  schema.pre(['find', 'findOne', 'countDocuments', 'deleteMany', 'deleteOne'], function () {
+    const filter = this.getQuery();
+    if (filter && typeof filter === 'object' && 'where' in filter) {
+      this.setQuery(translateWhere(filter.where));
+    }
+  });
+
   // Instance methods
   schema.methods.update = async function (data) {
     Object.assign(this, data);
@@ -195,26 +203,6 @@ export function applyMongoPlugin(schema) {
     }
 
     return query.exec();
-  };
-
-  // Override / wrap findOne to gracefully support both { where: { ... } } and standard mongo filter
-  const originalFindOne = schema.statics.findOne;
-  schema.statics.findOne = function (conditions, projection, options) {
-    if (conditions && typeof conditions === 'object' && 'where' in conditions) {
-      const filter = translateWhere(conditions.where);
-      let query = originalFindOne.call(this, filter, projection, options);
-
-      if (conditions.include) {
-        for (const inc of conditions.include) {
-          if (inc.as) {
-            const select = inc.attributes ? inc.attributes.join(' ') : '';
-            query = query.populate(inc.as, select);
-          }
-        }
-      }
-      return query;
-    }
-    return originalFindOne.call(this, conditions, projection, options);
   };
 
   schema.statics.count = async function (options = {}) {
