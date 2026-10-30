@@ -8,6 +8,16 @@ const userSchema = new mongoose.Schema({
     required: true,
     trim: true,
   },
+  firstName: {
+    type: String,
+    trim: true,
+    default: '',
+  },
+  lastName: {
+    type: String,
+    trim: true,
+    default: '',
+  },
   email: {
     type: String,
     required: true,
@@ -27,6 +37,63 @@ const userSchema = new mongoose.Schema({
   phone: {
     type: String,
     default: null,
+  },
+  avatar: {
+    type: String,
+    default: '',
+  },
+  age: {
+    type: Number,
+    default: null,
+  },
+  gender: {
+    type: String,
+    default: '',
+  },
+  userType: {
+    type: String,
+    enum: ['Owner', 'Dealer / Agent', 'Builder'],
+    default: 'Owner',
+  },
+  companyLogo: {
+    type: String,
+    default: '',
+  },
+  companyName: {
+    type: String,
+    default: '',
+  },
+  reraNumber: {
+    type: String,
+    default: '',
+  },
+  city: {
+    type: String,
+    default: '',
+  },
+  operatingSince: {
+    type: String,
+    default: '',
+  },
+  teamSize: {
+    type: String,
+    default: '',
+  },
+  localities: {
+    type: String,
+    default: '',
+  },
+  dealsIn: {
+    type: [String],
+    default: [],
+  },
+  about: {
+    type: String,
+    default: '',
+  },
+  isProfileCompleted: {
+    type: Boolean,
+    default: false,
   },
   isBlocked: {
     type: Boolean,

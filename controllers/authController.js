@@ -10,6 +10,30 @@ const generateToken = (userId) => {
   });
 };
 
+export const sanitizeUser = (user) => ({
+  id: user.id || user._id,
+  name: user.name,
+  firstName: user.firstName || '',
+  lastName: user.lastName || '',
+  email: user.email,
+  role: user.role,
+  phone: user.phone || null,
+  avatar: user.avatar || '',
+  age: user.age || null,
+  gender: user.gender || '',
+  userType: user.userType || 'Owner',
+  companyLogo: user.companyLogo || '',
+  companyName: user.companyName || '',
+  reraNumber: user.reraNumber || '',
+  city: user.city || '',
+  operatingSince: user.operatingSince || '',
+  teamSize: user.teamSize || '',
+  localities: user.localities || '',
+  dealsIn: user.dealsIn || [],
+  about: user.about || '',
+  isProfileCompleted: !!user.isProfileCompleted,
+});
+
 // POST /api/auth/register
 export const register = async (req, res) => {
   try {
@@ -25,10 +49,16 @@ export const register = async (req, res) => {
       return res.status(400).json({ message: 'An account with this email already exists' });
     }
 
+    const nameParts = name.trim().split(' ');
+    const firstName = nameParts[0] || name.trim();
+    const lastName = nameParts.slice(1).join(' ') || '';
+
     const hashedPassword = await bcrypt.hash(password, 10);
 
     const user = await User.create({
       name: name.trim(),
+      firstName,
+      lastName,
       email: cleanEmail,
       password: hashedPassword,
       phone: phone || null,
@@ -39,13 +69,7 @@ export const register = async (req, res) => {
 
     res.status(201).json({
       token,
-      user: {
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
-        phone: user.phone,
-      },
+      user: sanitizeUser(user),
     });
   } catch (error) {
     console.error('❌ Registration error:', error);
@@ -95,13 +119,7 @@ export const login = async (req, res) => {
 
     res.json({
       token,
-      user: {
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
-        phone: user.phone,
-      },
+      user: sanitizeUser(user),
     });
   } catch (error) {
     console.error('❌ Login error:', error);
@@ -118,7 +136,7 @@ export const getMe = async (req, res) => {
     if (!user) {
       return res.status(404).json({ message: 'User not found' });
     }
-    res.json({ user });
+    res.json({ user: sanitizeUser(user) });
   } catch (error) {
     res.status(500).json({ message: 'Failed to get user', error: error.message });
   }
@@ -226,13 +244,7 @@ export const verifyOtp = async (req, res) => {
     res.json({
       success: true,
       token,
-      user: {
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
-        phone: user.phone,
-      },
+      user: sanitizeUser(user),
     });
   } catch (error) {
     console.error('❌ Error verifying OTP:', error);
@@ -253,17 +265,28 @@ export const googleAuth = async (req, res) => {
     let user = await User.findOne({ where: { email: cleanEmail } });
 
     if (!user) {
+      const displayName = name?.trim() || cleanEmail.split('@')[0];
+      const nameParts = displayName.split(' ');
+      const firstName = nameParts[0] || displayName;
+      const lastName = nameParts.slice(1).join(' ') || '';
+
       const generatedPassword = await bcrypt.hash(`google_${Math.random()}`, 10);
       user = await User.create({
-        name: name?.trim() || cleanEmail.split('@')[0],
+        name: displayName,
+        firstName,
+        lastName,
         email: cleanEmail,
         password: generatedPassword,
         phone: phone || null,
+        avatar: avatar || '',
         role: 'user',
+        isProfileCompleted: false,
       });
       console.log(`🎉 New client account created via Google: ${cleanEmail}`);
     } else if (user.isBlocked) {
       return res.status(403).json({ message: 'Account is blocked. Please contact support.' });
+    } else if (avatar && !user.avatar) {
+      await user.update({ avatar });
     }
 
     const token = generateToken(user.id);
@@ -271,16 +294,133 @@ export const googleAuth = async (req, res) => {
     res.json({
       success: true,
       token,
-      user: {
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
-        phone: user.phone,
-      },
+      user: sanitizeUser(user),
     });
   } catch (error) {
     console.error('❌ Google auth error:', error);
     res.status(500).json({ message: 'Google authentication failed', error: error.message });
+  }
+};
+
+// POST /api/auth/instant-gmail - Instant Gmail login / account create WITHOUT ANY OTP
+export const instantGmailAuth = async (req, res) => {
+  try {
+    const { email, name, avatar } = req.body;
+
+    if (!email) {
+      return res.status(400).json({ message: 'Gmail address is required' });
+    }
+
+    const cleanEmail = email.toLowerCase().trim();
+    let user = await User.findOne({ where: { email: cleanEmail } });
+
+    if (!user) {
+      const displayName = name?.trim() || cleanEmail.split('@')[0];
+      const nameParts = displayName.split(' ');
+      const firstName = nameParts[0] || displayName;
+      const lastName = nameParts.slice(1).join(' ') || '';
+
+      const generatedPassword = await bcrypt.hash(`gmail_instant_${Date.now()}_${Math.random()}`, 10);
+      user = await User.create({
+        name: displayName,
+        firstName,
+        lastName,
+        email: cleanEmail,
+        password: generatedPassword,
+        avatar: avatar || '',
+        role: 'user',
+        userType: 'Owner',
+        isProfileCompleted: false,
+      });
+      console.log(`🎉 Instant Gmail user account registered without OTP: ${cleanEmail}`);
+    } else {
+      if (user.isBlocked) {
+        return res.status(403).json({ message: 'This account has been blocked. Please contact support.' });
+      }
+      if (avatar && !user.avatar) {
+        await user.update({ avatar });
+      }
+      console.log(`✅ Instant Gmail user logged in without OTP: ${cleanEmail}`);
+    }
+
+    const token = generateToken(user.id);
+
+    res.json({
+      success: true,
+      token,
+      user: sanitizeUser(user),
+    });
+  } catch (error) {
+    console.error('❌ Instant Gmail authentication error:', error);
+    res.status(500).json({ message: 'Authentication failed', error: error.message });
+  }
+};
+
+// PUT /api/auth/profile - Update user profile (HomesWale reference: Owner / Dealer-Agent / Builder)
+export const updateProfile = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const user = await User.findByPk(userId);
+
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    const {
+      firstName,
+      lastName,
+      phone,
+      age,
+      gender,
+      userType,
+      avatar,
+      companyLogo,
+      companyName,
+      reraNumber,
+      city,
+      operatingSince,
+      teamSize,
+      localities,
+      dealsIn,
+      about,
+    } = req.body;
+
+    const computedName = [firstName?.trim(), lastName?.trim()].filter(Boolean).join(' ') || user.name;
+
+    const updateFields = {
+      name: computedName,
+      firstName: firstName !== undefined ? firstName.trim() : user.firstName,
+      lastName: lastName !== undefined ? lastName.trim() : user.lastName,
+      phone: phone !== undefined ? phone.trim() : user.phone,
+      age: age !== undefined ? (age ? Number(age) : null) : user.age,
+      gender: gender !== undefined ? gender : user.gender,
+      userType: userType !== undefined ? userType : user.userType,
+      avatar: avatar !== undefined ? avatar : user.avatar,
+      companyLogo: companyLogo !== undefined ? companyLogo : user.companyLogo,
+      companyName: companyName !== undefined ? companyName.trim() : user.companyName,
+      reraNumber: reraNumber !== undefined ? reraNumber.trim() : user.reraNumber,
+      city: city !== undefined ? city.trim() : user.city,
+      operatingSince: operatingSince !== undefined ? operatingSince.trim() : user.operatingSince,
+      teamSize: teamSize !== undefined ? teamSize.trim() : user.teamSize,
+      localities: localities !== undefined ? localities.trim() : user.localities,
+      dealsIn: Array.isArray(dealsIn) ? dealsIn : user.dealsIn,
+      about: about !== undefined ? about.trim() : user.about,
+      isProfileCompleted: true,
+    };
+
+    await user.update(updateFields);
+
+    const refreshedUser = await User.findByPk(userId, {
+      attributes: { exclude: ['password'] }
+    });
+
+    res.json({
+      success: true,
+      message: 'Profile updated successfully!',
+      user: sanitizeUser(refreshedUser),
+    });
+  } catch (error) {
+    console.error('❌ Update profile error:', error);
+    res.status(500).json({ message: 'Failed to update profile', error: error.message });
   }
 };
