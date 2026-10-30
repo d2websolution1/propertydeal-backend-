@@ -313,6 +313,7 @@ export const instantGmailAuth = async (req, res) => {
 
     const cleanEmail = email.toLowerCase().trim();
     let user = await User.findOne({ where: { email: cleanEmail } });
+    let isExistingUser = false;
 
     if (!user) {
       const displayName = name?.trim() || cleanEmail.split('@')[0];
@@ -330,17 +331,18 @@ export const instantGmailAuth = async (req, res) => {
         avatar: avatar || '',
         role: 'user',
         userType: 'Owner',
-        isProfileCompleted: false,
+        isProfileCompleted: true,
       });
       console.log(`🎉 Instant Gmail user account registered without OTP: ${cleanEmail}`);
     } else {
+      isExistingUser = true;
       if (user.isBlocked) {
         return res.status(403).json({ message: 'This account has been blocked. Please contact support.' });
       }
       if (avatar && !user.avatar) {
         await user.update({ avatar });
       }
-      console.log(`✅ Instant Gmail user logged in without OTP: ${cleanEmail}`);
+      console.log(`✅ Existing user logged in without OTP: ${cleanEmail}`);
     }
 
     const token = generateToken(user.id);
@@ -349,6 +351,8 @@ export const instantGmailAuth = async (req, res) => {
       success: true,
       token,
       user: sanitizeUser(user),
+      isExistingUser,
+      message: isExistingUser ? `Welcome back, ${user.name}!` : 'Account created successfully!',
     });
   } catch (error) {
     console.error('❌ Instant Gmail authentication error:', error);

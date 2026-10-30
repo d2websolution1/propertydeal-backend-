@@ -22,14 +22,29 @@ const propertySchema = new mongoose.Schema({
   },
   listingType: {
     type: String,
-    enum: ['sale', 'rent'],
     default: 'sale',
+  },
+  state: {
+    type: String,
+    default: 'Uttar Pradesh',
   },
   city: {
     type: String,
     required: true,
   },
   locality: {
+    type: String,
+    default: '',
+  },
+  projectName: {
+    type: String,
+    default: '',
+  },
+  pincode: {
+    type: String,
+    default: '',
+  },
+  address: {
     type: String,
     default: '',
   },
@@ -40,6 +55,42 @@ const propertySchema = new mongoose.Schema({
   areaSqft: {
     type: Number,
     default: null,
+  },
+  bookingAmount: {
+    type: Number,
+    default: null,
+  },
+  maintenanceCharges: {
+    type: Number,
+    default: null,
+  },
+  isNegotiable: {
+    type: Boolean,
+    default: false,
+  },
+  furnishing: {
+    type: String,
+    default: 'Semi-Furnished',
+  },
+  amenities: {
+    type: [String],
+    default: [],
+  },
+  reraNumber: {
+    type: String,
+    default: '',
+  },
+  contactName: {
+    type: String,
+    default: '',
+  },
+  whatsappAlerts: {
+    type: Boolean,
+    default: true,
+  },
+  qualityScore: {
+    type: Number,
+    default: 0,
   },
   images: {
     type: [String],
