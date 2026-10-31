@@ -84,6 +84,31 @@ const propertySchema = new mongoose.Schema({
     type: String,
     default: '',
   },
+  contactEmail: {
+    type: String,
+    default: '',
+  },
+  contactPhone: {
+    type: String,
+    default: '',
+  },
+  ownerName: {
+    type: String,
+    default: '',
+  },
+  ownerEmail: {
+    type: String,
+    default: '',
+  },
+  ownerPhone: {
+    type: String,
+    default: '',
+  },
+  postedByType: {
+    type: String,
+    enum: ['Owner', 'Dealer / Agent', 'Builder'],
+    default: 'Owner',
+  },
   whatsappAlerts: {
     type: Boolean,
     default: true,

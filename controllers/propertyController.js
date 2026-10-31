@@ -2,6 +2,7 @@
 import Property from '../models/Property.js';
 import User from '../models/User.js';
 import { Op } from 'sequelize';
+import jwt from 'jsonwebtoken';
 
 // GET /api/properties
 export const getPublicProperties = async (req, res) => {
@@ -69,7 +70,7 @@ export const getPublicProperties = async (req, res) => {
         {
           model: User,
           as: 'owner',
-          attributes: ['id', 'name', 'email', 'phone', 'role'],
+          attributes: ['id', 'name', 'email', 'phone', 'role', 'userType', 'companyName'],
         },
       ],
     });
@@ -85,6 +86,70 @@ export const getPublicProperties = async (req, res) => {
   }
 };
 
+// GET /api/properties/user/my-listings
+export const getMyPropertyListings = async (req, res) => {
+  try {
+    const userId = req.user.id || req.user._id;
+    const userEmail = req.user.email ? req.user.email.toLowerCase().trim() : '';
+
+    const filter = {
+      $or: [
+        { owner: userId },
+        ...(userEmail ? [{ ownerEmail: userEmail }, { contactEmail: userEmail }] : []),
+      ],
+    };
+
+    const properties = await Property.find(filter)
+      .populate('owner', 'id name email phone userType companyName reraNumber avatar')
+      .sort({ createdAt: -1 });
+
+    const counts = {
+      all: properties.length,
+      active: properties.filter((p) => p.status === 'approved').length,
+      pending: properties.filter((p) => p.status === 'pending').length,
+      rejected: properties.filter((p) => p.status === 'rejected').length,
+    };
+
+    res.json({
+      success: true,
+      properties,
+      counts,
+    });
+  } catch (error) {
+    console.error('Error fetching user listings:', error);
+    res.status(500).json({ success: false, message: 'Failed to fetch your listings', error: error.message });
+  }
+};
+
+// DELETE /api/properties/user/:id
+export const deleteUserProperty = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const userId = req.user.id || req.user._id;
+    const userEmail = req.user.email ? req.user.email.toLowerCase().trim() : '';
+
+    const property = await Property.findById(id);
+    if (!property) {
+      return res.status(404).json({ success: false, message: 'Property not found' });
+    }
+
+    const isOwner =
+      (property.owner && property.owner.toString() === userId.toString()) ||
+      (property.ownerEmail && property.ownerEmail.toLowerCase().trim() === userEmail) ||
+      (property.contactEmail && property.contactEmail.toLowerCase().trim() === userEmail);
+
+    if (!isOwner && req.user.role !== 'admin') {
+      return res.status(403).json({ success: false, message: 'Not authorized to delete this property' });
+    }
+
+    await Property.findByIdAndDelete(id);
+    res.json({ success: true, message: 'Property deleted successfully' });
+  } catch (error) {
+    console.error('Error deleting property:', error);
+    res.status(500).json({ success: false, message: 'Failed to delete property', error: error.message });
+  }
+};
+
 // GET /api/properties/:id
 export const getPropertyById = async (req, res) => {
   try {
@@ -94,7 +159,7 @@ export const getPropertyById = async (req, res) => {
         {
           model: User,
           as: 'owner',
-          attributes: ['id', 'name', 'email', 'phone', 'role'],
+          attributes: ['id', 'name', 'email', 'phone', 'role', 'userType', 'companyName', 'reraNumber'],
         },
       ],
     });
@@ -109,7 +174,7 @@ export const getPropertyById = async (req, res) => {
   }
 };
 
-// POST /api/properties (Public submission / post property matching HomesWale)
+// POST /api/properties (Property submission by Owner / Dealer / Builder)
 export const postPublicProperty = async (req, res) => {
   try {
     const {
@@ -139,6 +204,7 @@ export const postPublicProperty = async (req, res) => {
       ownerName,
       ownerPhone,
       ownerEmail,
+      postedByType,
     } = req.body;
 
     if (!price || !city) {
@@ -146,31 +212,65 @@ export const postPublicProperty = async (req, res) => {
     }
 
     // Auto generate clear title if left blank
-    const autoTitle = title?.trim() || [
-      bhk || '',
-      propertyType || 'Residential Property',
-      projectName ? `in ${projectName}` : '',
-      locality ? locality : '',
-      city ? city : '',
-    ].filter(Boolean).join(' ');
+    const autoTitle =
+      title?.trim() ||
+      [
+        bhk || '',
+        propertyType || 'Residential Property',
+        projectName ? `in ${projectName}` : '',
+        locality ? locality : '',
+        city ? city : '',
+      ]
+        .filter(Boolean)
+        .join(' ');
 
-    // Find or link owner
+    // 1. Check for logged in user via Authorization Bearer token
+    let authUser = null;
+    const authHeader = req.headers.authorization;
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      try {
+        const token = authHeader.split(' ')[1];
+        const decoded = jwt.verify(token, process.env.JWT_SECRET || 'homeswale-secret-key-2025');
+        if (decoded?.id) {
+          authUser = await User.findByPk(decoded.id);
+        }
+      } catch (e) {
+        // token invalid or expired, continue with email lookup
+      }
+    }
+
     let ownerId = null;
-    if (ownerEmail) {
-      let owner = await User.findOne({ where: { email: ownerEmail.toLowerCase().trim() } });
+    let resolvedUserType = postedByType || 'Owner';
+    let resolvedEmail = ownerEmail?.toLowerCase().trim() || '';
+    let resolvedName = contactName || ownerName || 'Property Owner';
+    let resolvedPhone = ownerPhone || '';
+
+    if (authUser) {
+      ownerId = authUser.id;
+      resolvedEmail = authUser.email;
+      resolvedName = authUser.name || resolvedName;
+      resolvedPhone = authUser.phone || resolvedPhone;
+      resolvedUserType = authUser.userType || postedByType || 'Owner';
+    } else if (resolvedEmail) {
+      let owner = await User.findOne({ where: { email: resolvedEmail } });
       if (!owner) {
         owner = await User.create({
-          name: contactName || ownerName || 'Property Owner',
-          email: ownerEmail.toLowerCase().trim(),
+          name: resolvedName,
+          email: resolvedEmail,
           password: 'temp_' + Math.random().toString(36).substring(7),
-          phone: ownerPhone || null,
+          phone: resolvedPhone || null,
           role: 'user',
+          userType: postedByType && ['Owner', 'Dealer / Agent', 'Builder'].includes(postedByType) ? postedByType : 'Owner',
         });
       }
       ownerId = owner.id;
+      resolvedUserType = owner.userType || postedByType || 'Owner';
     }
 
     const uniqueCode = 'HW-' + Math.floor(1000 + Math.random() * 9000);
+
+    // If an admin posts it, auto-approve. If a user (Owner / Dealer / Builder) posts, set to pending so Admin can review & permit it!
+    const initialStatus = authUser?.role === 'admin' ? 'approved' : 'pending';
 
     const property = await Property.create({
       title: autoTitle,
@@ -192,22 +292,29 @@ export const postPublicProperty = async (req, res) => {
       furnishing: furnishing || 'Semi-Furnished',
       amenities: Array.isArray(amenities) ? amenities : [],
       reraNumber: reraNumber ? reraNumber.trim() : '',
-      contactName: contactName ? contactName.trim() : '',
+      contactName: resolvedName,
+      contactEmail: resolvedEmail,
+      contactPhone: resolvedPhone,
+      ownerName: resolvedName,
+      ownerEmail: resolvedEmail,
+      ownerPhone: resolvedPhone,
+      postedByType: resolvedUserType,
       whatsappAlerts: whatsappAlerts !== undefined ? !!whatsappAlerts : true,
       qualityScore: qualityScore ? Number(qualityScore) : 0,
-      images: Array.isArray(images) && images.length ? images : [
-        'https://images.unsplash.com/photo-1560518883-ce09059eeffa?auto=format&fit=crop&w=1200&q=80'
-      ],
-      status: 'approved', // auto-approve so it shows on site immediately
+      images:
+        Array.isArray(images) && images.length
+          ? images
+          : ['https://images.unsplash.com/photo-1560518883-ce09059eeffa?auto=format&fit=crop&w=1200&q=80'],
+      status: initialStatus,
       isFeatured: false,
-      isVerified: true,
+      isVerified: authUser?.role === 'admin',
       uniqueCode,
       ownerId,
     });
 
     res.status(201).json({
       success: true,
-      message: 'Property posted successfully!',
+      message: initialStatus === 'approved' ? 'Property posted successfully!' : 'Property submitted for admin review!',
       property,
     });
   } catch (error) {

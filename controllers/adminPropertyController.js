@@ -3,25 +3,55 @@ import { Op } from 'sequelize';
 import Property from '../models/Property.js';
 import User from '../models/User.js';
 
-// GET /api/admin/properties?status=&search=&page=1&limit=10
+// GET /api/admin/properties?status=&search=&userType=&page=1&limit=10
 export const getAllProperties = async (req, res) => {
   try {
-    const { status = '', search = '', page = 1, limit = 10 } = req.query;
+    const { status = '', search = '', userType = '', page = 1, limit = 10 } = req.query;
     const offset = (Number(page) - 1) * Number(limit);
 
     const where = {};
     if (status) where.status = status;
+    if (userType && userType !== 'all') {
+      where.postedByType = userType;
+    }
     if (search) {
       where[Op.or] = [
         { title: { [Op.like]: `%${search}%` } },
         { city: { [Op.like]: `%${search}%` } },
         { uniqueCode: { [Op.like]: `%${search}%` } },
+        { ownerName: { [Op.like]: `%${search}%` } },
+        { ownerEmail: { [Op.like]: `%${search}%` } },
+        { contactPhone: { [Op.like]: `%${search}%` } },
       ];
     }
 
+    const [pendingCount, approvedCount, rejectedCount, totalCount] = await Promise.all([
+      Property.countDocuments({ status: 'pending' }),
+      Property.countDocuments({ status: 'approved' }),
+      Property.countDocuments({ status: 'rejected' }),
+      Property.countDocuments({}),
+    ]);
+
     const { rows, count } = await Property.findAndCountAll({
       where,
-      include: [{ model: User, as: 'owner', attributes: ['id', 'name', 'email'] }],
+      include: [
+        {
+          model: User,
+          as: 'owner',
+          attributes: [
+            'id',
+            'name',
+            'email',
+            'phone',
+            'userType',
+            'role',
+            'companyName',
+            'reraNumber',
+            'city',
+            'avatar',
+          ],
+        },
+      ],
       limit: Number(limit),
       offset,
       order: [['createdAt', 'DESC']],
@@ -32,6 +62,12 @@ export const getAllProperties = async (req, res) => {
       total: count,
       page: Number(page),
       totalPages: Math.ceil(count / Number(limit)),
+      counts: {
+        all: totalCount,
+        pending: pendingCount,
+        approved: approvedCount,
+        rejected: rejectedCount,
+      },
     });
   } catch (error) {
     res.status(500).json({ message: 'Failed to fetch properties', error: error.message });
