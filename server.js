@@ -93,6 +93,7 @@ app.use('/api/properties', propertyRoutes);
 app.use('/api/admin/users', adminUserRoutes);
 app.use('/api/admin/properties', adminPropertyRoutes);
 app.use('/api/admin/dashboard', adminDashboardRoutes);
+app.use('/api/admin/reports', adminDashboardRoutes);
 
 // ── Homepage / Rent / other pages content ──
 app.use('/api/home-sections', homeSectionRoutes);
@@ -124,6 +125,7 @@ app.use('/api/admin/banners', adminBannerRoutes);
 // ── Bulk WhatsApp / SMS / Email (admin only) ──
 app.use('/api/admin/bulk-messaging', adminBulkMessageRoutes);
 app.use('/api/admin/listings', adminListingRoutes);
+app.use('/api/admin/enquiries', adminListingRoutes);
 
 const PORT = process.env.PORT || 5000;
 

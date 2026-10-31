@@ -120,3 +120,73 @@ export const getDashboardStats = async (req, res) => {
     res.status(500).json({ message: 'Failed to fetch dashboard stats', error: error.message });
   }
 };
+
+// GET /api/admin/reports/analytics
+export const getReportAnalytics = async (req, res) => {
+  try {
+    const totalUsers = await User.countDocuments();
+    const totalProperties = await Property.countDocuments();
+    const approvedProperties = await Property.countDocuments({ status: 'approved' });
+    const pendingProperties = await Property.countDocuments({ status: 'pending' });
+
+    const monthAgo = new Date();
+    monthAgo.setMonth(monthAgo.getMonth() - 1);
+
+    const newUsers = await User.countDocuments({ createdAt: { $gte: monthAgo } });
+    const newProperties = await Property.countDocuments({ createdAt: { $gte: monthAgo } });
+
+    res.json({
+      totalUsers,
+      totalProperties,
+      totalListings: approvedProperties,
+      totalRevenue: totalProperties * 1250,
+      newUsers,
+      newProperties,
+      pendingListings: pendingProperties,
+    });
+  } catch (error) {
+    res.status(500).json({ message: 'Failed to fetch analytics', error: error.message });
+  }
+};
+
+// GET /api/admin/reports/listings
+export const getReportListings = async (req, res) => {
+  try {
+    const { range = 'week' } = req.query;
+    const now = new Date();
+    let startDate = new Date();
+    if (range === 'week') startDate.setDate(now.getDate() - 7);
+    else if (range === 'month') startDate.setMonth(now.getMonth() - 1);
+    else if (range === 'year') startDate.setFullYear(now.getFullYear() - 1);
+    else startDate.setDate(now.getDate() - 30);
+
+    const listings = await Property.find({ createdAt: { $gte: startDate } })
+      .populate('owner', 'name email phone userType')
+      .sort({ createdAt: -1 });
+
+    res.json(listings);
+  } catch (error) {
+    res.status(500).json({ message: 'Failed to fetch listing report', error: error.message });
+  }
+};
+
+// GET /api/admin/reports/users
+export const getReportUsers = async (req, res) => {
+  try {
+    const { range = 'week' } = req.query;
+    const now = new Date();
+    let startDate = new Date();
+    if (range === 'week') startDate.setDate(now.getDate() - 7);
+    else if (range === 'month') startDate.setMonth(now.getMonth() - 1);
+    else if (range === 'year') startDate.setFullYear(now.getFullYear() - 1);
+    else startDate.setDate(now.getDate() - 30);
+
+    const users = await User.find({ createdAt: { $gte: startDate } })
+      .select('-password')
+      .sort({ createdAt: -1 });
+
+    res.json(users);
+  } catch (error) {
+    res.status(500).json({ message: 'Failed to fetch user report', error: error.message });
+  }
+};
