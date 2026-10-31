@@ -49,6 +49,7 @@ import bannerRoutes from './routes/bannerRoutes.js';
 import adminBannerRoutes from './routes/adminBannerRoutes.js';
 
 import adminBulkMessageRoutes from './routes/adminBulkMessageRoutes.js';
+import adminBillingRoutes from './routes/adminBillingRoutes.js';
 
 dotenv.config();
 
@@ -126,6 +127,8 @@ app.use('/api/admin/banners', adminBannerRoutes);
 app.use('/api/admin/bulk-messaging', adminBulkMessageRoutes);
 app.use('/api/admin/listings', adminListingRoutes);
 app.use('/api/admin/enquiries', adminListingRoutes);
+app.use('/api/admin/payments', adminBillingRoutes);
+app.use('/api/admin/subscriptions', adminBillingRoutes);
 
 const PORT = process.env.PORT || 5000;
 

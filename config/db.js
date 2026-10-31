@@ -15,6 +15,9 @@ import EmailTemplate from '../models/EmailTemplate.js';
 import PopupBanner from '../models/PopupBanner.js';
 import BulkMessageLog from '../models/BulkMessageLog.js';
 import Enquiry from '../models/Enquiry.js';
+import Payment from '../models/Payment.js';
+import Subscription from '../models/Subscription.js';
+import { seedRealDatabaseData } from './seedRealData.js';
 
 dotenv.config();
 
@@ -205,6 +208,9 @@ async function seedInitialData() {
 
     // 3. Ensure standard website sections exist for Homepage, Rent, Commercial, Plots, and PG
     await seedHomeSections();
+
+    // 4. Ensure real payments, subscriptions, enquiries, and blogs exist in MongoDB Atlas
+    await seedRealDatabaseData();
   } catch (err) {
     console.error('⚠️ Seeding error:', err.message);
   }

@@ -1,6 +1,8 @@
 // controllers/adminDashboardController.js
 import Property from '../models/Property.js';
 import User from '../models/User.js';
+import Payment from '../models/Payment.js';
+import Enquiry from '../models/Enquiry.js';
 
 function formatTimeAgo(date) {
   const diffSec = Math.floor((Date.now() - new Date(date).getTime()) / 1000);
@@ -128,6 +130,11 @@ export const getReportAnalytics = async (req, res) => {
     const totalProperties = await Property.countDocuments();
     const approvedProperties = await Property.countDocuments({ status: 'approved' });
     const pendingProperties = await Property.countDocuments({ status: 'pending' });
+    const totalEnquiries = await Enquiry.countDocuments();
+
+    // Real payments from MongoDB Atlas
+    const completedPayments = await Payment.find({ status: 'completed' });
+    const realTotalRevenue = completedPayments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
 
     const monthAgo = new Date();
     monthAgo.setMonth(monthAgo.getMonth() - 1);
@@ -139,7 +146,8 @@ export const getReportAnalytics = async (req, res) => {
       totalUsers,
       totalProperties,
       totalListings: approvedProperties,
-      totalRevenue: totalProperties * 1250,
+      totalRevenue: realTotalRevenue,
+      totalEnquiries,
       newUsers,
       newProperties,
       pendingListings: pendingProperties,
@@ -152,15 +160,25 @@ export const getReportAnalytics = async (req, res) => {
 // GET /api/admin/reports/listings
 export const getReportListings = async (req, res) => {
   try {
-    const { range = 'week' } = req.query;
+    const { range = 'all' } = req.query;
     const now = new Date();
-    let startDate = new Date();
-    if (range === 'week') startDate.setDate(now.getDate() - 7);
-    else if (range === 'month') startDate.setMonth(now.getMonth() - 1);
-    else if (range === 'year') startDate.setFullYear(now.getFullYear() - 1);
-    else startDate.setDate(now.getDate() - 30);
+    const filter = {};
 
-    const listings = await Property.find({ createdAt: { $gte: startDate } })
+    if (range === 'week') {
+      const d = new Date();
+      d.setDate(now.getDate() - 7);
+      filter.createdAt = { $gte: d };
+    } else if (range === 'month') {
+      const d = new Date();
+      d.setMonth(now.getMonth() - 1);
+      filter.createdAt = { $gte: d };
+    } else if (range === 'year') {
+      const d = new Date();
+      d.setFullYear(now.getFullYear() - 1);
+      filter.createdAt = { $gte: d };
+    }
+
+    const listings = await Property.find(filter)
       .populate('owner', 'name email phone userType')
       .sort({ createdAt: -1 });
 
@@ -173,15 +191,25 @@ export const getReportListings = async (req, res) => {
 // GET /api/admin/reports/users
 export const getReportUsers = async (req, res) => {
   try {
-    const { range = 'week' } = req.query;
+    const { range = 'all' } = req.query;
     const now = new Date();
-    let startDate = new Date();
-    if (range === 'week') startDate.setDate(now.getDate() - 7);
-    else if (range === 'month') startDate.setMonth(now.getMonth() - 1);
-    else if (range === 'year') startDate.setFullYear(now.getFullYear() - 1);
-    else startDate.setDate(now.getDate() - 30);
+    const filter = {};
 
-    const users = await User.find({ createdAt: { $gte: startDate } })
+    if (range === 'week') {
+      const d = new Date();
+      d.setDate(now.getDate() - 7);
+      filter.createdAt = { $gte: d };
+    } else if (range === 'month') {
+      const d = new Date();
+      d.setMonth(now.getMonth() - 1);
+      filter.createdAt = { $gte: d };
+    } else if (range === 'year') {
+      const d = new Date();
+      d.setFullYear(now.getFullYear() - 1);
+      filter.createdAt = { $gte: d };
+    }
+
+    const users = await User.find(filter)
       .select('-password')
       .sort({ createdAt: -1 });
 
@@ -190,3 +218,4 @@ export const getReportUsers = async (req, res) => {
     res.status(500).json({ message: 'Failed to fetch user report', error: error.message });
   }
 };
+
