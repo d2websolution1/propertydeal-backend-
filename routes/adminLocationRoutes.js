@@ -20,3 +20,4 @@ router.post('/:id/areas', addAreaToCity);
 router.delete('/:id', deleteLocation);
 
 export default router;
+

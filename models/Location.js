@@ -39,3 +39,4 @@ applyMongoPlugin(locationSchema);
 
 const Location = mongoose.models.Location || mongoose.model('Location', locationSchema);
 export default Location;
+

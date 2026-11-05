@@ -45,20 +45,31 @@ const connectDB = async () => {
 
 async function seedInitialData() {
   try {
-    // 1. Ensure Property Adda Admin exists
-    const primaryAdminEmail = 'admin@property-adda.com';
-    let admin = await User.findOne({ email: primaryAdminEmail });
-    if (!admin) {
-      const hashedPassword = await bcrypt.hash('admin123', 10);
-      admin = await User.create({
-        name: 'Property Adda Admin',
-        email: primaryAdminEmail,
-        password: hashedPassword,
-        role: 'admin',
-        phone: '+91 9672056670',
-        isBlocked: false,
-      });
-      console.log(`⭐ Seeded primary admin: ${primaryAdminEmail} (password: admin123)`);
+    // 1. Ensure Property Adda Admin accounts exist (both hyphenated and non-hyphenated)
+    const adminEmails = ['admin@property-adda.com', 'admin@propertyadda.com'];
+    let admin = null;
+    for (const aEmail of adminEmails) {
+      let aUser = await User.findOne({ email: aEmail });
+      if (!aUser) {
+        const hashedPassword = await bcrypt.hash('admin123', 10);
+        aUser = await User.create({
+          name: 'Property Adda Admin',
+          email: aEmail,
+          password: hashedPassword,
+          role: 'admin',
+          phone: '+91 9672056670',
+          isBlocked: false,
+        });
+        console.log(`⭐ Seeded admin: ${aEmail} (password: admin123)`);
+      } else {
+        // Ensure role is admin and account is active
+        if (aUser.role !== 'admin' || aUser.isBlocked) {
+          aUser.role = 'admin';
+          aUser.isBlocked = false;
+          await aUser.save();
+        }
+      }
+      if (!admin) admin = aUser;
     }
 
     // Secondary admin

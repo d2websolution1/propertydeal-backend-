@@ -196,3 +196,4 @@ export const deleteLocation = async (req, res) => {
     res.status(500).json({ message: 'Failed to delete location', error: error.message });
   }
 };
+

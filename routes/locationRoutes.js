@@ -7,3 +7,4 @@ const router = express.Router();
 router.get('/', getPublicLocations);
 
 export default router;
+
