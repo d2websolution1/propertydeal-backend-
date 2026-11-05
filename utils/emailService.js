@@ -34,7 +34,7 @@ const createTransporter = () => {
  */
 export const sendOtpEmail = async (email, otp, name = 'Valued Client') => {
   console.log(`\n==================================================`);
-  console.log(`📧 [PropertyDeal OTP]`);
+  console.log(`📧 [Property Adda OTP]`);
   console.log(`Recipient: ${email}`);
   console.log(`Verification Code (OTP): 👉 ${otp} 👈`);
   console.log(`Time: ${new Date().toLocaleTimeString()}`);
@@ -72,17 +72,17 @@ export const sendOtpEmail = async (email, otp, name = 'Valued Client') => {
     <body>
       <div class="container">
         <div class="header">
-          <h1>PropertyDeal</h1>
+          <h1>Property Adda</h1>
           <p>India's Premium Real Estate Network</p>
         </div>
         <div class="body">
           <p class="greeting">Hello <strong>${name}</strong>,</p>
-          <p class="desc">Please use the following 6-digit One-Time Password (OTP) to securely sign in or create your PropertyDeal client account. This OTP is valid for 10 minutes.</p>
+          <p class="desc">Please use the following 6-digit One-Time Password (OTP) to securely sign in or create your Property Adda client account. This OTP is valid for 10 minutes.</p>
           <div class="otp-box">${otp}</div>
           <p class="desc" style="font-size: 12px; color: #94a3b8;">If you did not request this verification code, please ignore this email or contact support.</p>
         </div>
         <div class="footer">
-          &copy; ${new Date().getFullYear()} PropertyDeal India. All rights reserved.
+          &copy; ${new Date().getFullYear()} Property Adda India. All rights reserved.
         </div>
       </div>
     </body>
@@ -91,9 +91,9 @@ export const sendOtpEmail = async (email, otp, name = 'Valued Client') => {
 
   try {
     const info = await transporter.sendMail({
-      from: `"PropertyDeal Support" <${process.env.EMAIL_USER || 'no-reply@propertydeal.com'}>`,
+      from: `"Property Adda Support" <${process.env.EMAIL_USER || 'info@property-adda.com'}>`,
       to: email,
-      subject: `${otp} is your PropertyDeal verification code`,
+      subject: `${otp} is your Property Adda verification code`,
       html: htmlContent,
     });
     return { sent: true, mode: 'smtp', messageId: info.messageId };

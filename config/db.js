@@ -45,33 +45,33 @@ const connectDB = async () => {
 
 async function seedInitialData() {
   try {
-    // 1. Ensure PropertyDeal Admin exists
-    const primaryAdminEmail = 'admin@propertydeal.com';
+    // 1. Ensure Property Adda Admin exists
+    const primaryAdminEmail = 'admin@property-adda.com';
     let admin = await User.findOne({ email: primaryAdminEmail });
     if (!admin) {
       const hashedPassword = await bcrypt.hash('admin123', 10);
       admin = await User.create({
-        name: 'PropertyDeal Admin',
+        name: 'Property Adda Admin',
         email: primaryAdminEmail,
         password: hashedPassword,
         role: 'admin',
-        phone: '+91 9876543210',
+        phone: '+91 9672056670',
         isBlocked: false,
       });
       console.log(`⭐ Seeded primary admin: ${primaryAdminEmail} (password: admin123)`);
     }
 
     // Secondary admin
-    const secondaryAdminEmail = 'admin@homeswale.com';
-    const secAdmin = await User.findOne({ email: secondaryAdminEmail });
+    const secondaryAdminEmail = 'admin@property-adda.com';
+    const secAdmin = await User.findOne({ email: secondaryAdminEmail, name: 'Property Adda Admin Backup' });
     if (!secAdmin) {
       const hashedPassword = await bcrypt.hash('admin123', 10);
       await User.create({
-        name: 'PropertyDeal Admin Backup',
-        email: secondaryAdminEmail,
+        name: 'Property Adda Admin Backup',
+        email: 'backup-admin@property-adda.com',
         password: hashedPassword,
         role: 'admin',
-        phone: '+91 9876543211',
+        phone: '+91 9509505892',
         isBlocked: false,
       });
     }
