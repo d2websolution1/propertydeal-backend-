@@ -243,31 +243,53 @@ export const postPublicProperty = async (req, res) => {
     let resolvedUserType = postedByType || 'Owner';
     let resolvedEmail = ownerEmail?.toLowerCase().trim() || '';
     let resolvedName = contactName || ownerName || 'Property Owner';
-    let resolvedPhone = ownerPhone || '';
+    let resolvedPhone = ownerPhone?.trim() || '';
 
     if (authUser) {
-      ownerId = authUser.id;
-      resolvedEmail = authUser.email;
+      ownerId = authUser._id || authUser.id;
+      resolvedEmail = authUser.email || resolvedEmail;
       resolvedName = authUser.name || resolvedName;
       resolvedPhone = authUser.phone || resolvedPhone;
       resolvedUserType = authUser.userType || postedByType || 'Owner';
-    } else if (resolvedEmail) {
-      let owner = await User.findOne({ where: { email: resolvedEmail } });
-      if (!owner) {
-        owner = await User.create({
-          name: resolvedName,
-          email: resolvedEmail,
-          password: 'temp_' + Math.random().toString(36).substring(7),
-          phone: resolvedPhone || null,
-          role: 'user',
-          userType: postedByType && ['Owner', 'Dealer / Agent', 'Builder'].includes(postedByType) ? postedByType : 'Owner',
+    } else if (resolvedEmail || resolvedPhone) {
+      let owner = null;
+      if (resolvedEmail) {
+        owner = await User.findOne({ where: { email: resolvedEmail } });
+      }
+      if (!owner && resolvedPhone) {
+        const cleanP = resolvedPhone.replace(/[^\d+]/g, '');
+        owner = await User.findOne({
+          where: {
+            $or: [
+              { phone: cleanP },
+              { phone: cleanP.startsWith('+91') ? cleanP.replace('+91', '') : '+91' + cleanP },
+            ]
+          }
         });
       }
-      ownerId = owner.id;
-      resolvedUserType = owner.userType || postedByType || 'Owner';
+      if (!owner) {
+        try {
+          const autoEmail = resolvedEmail || (resolvedPhone.replace(/\D/g, '') + '@phone.property-adda.com');
+          owner = await User.create({
+            name: resolvedName,
+            email: autoEmail,
+            password: 'temp_' + Math.random().toString(36).substring(7),
+            phone: resolvedPhone || null,
+            role: 'user',
+            userType: resolvedUserType,
+          });
+        } catch (createErr) {
+          console.warn('Fallback finding existing user after create attempt:', createErr.message);
+          if (resolvedEmail) owner = await User.findOne({ where: { email: resolvedEmail } });
+        }
+      }
+      if (owner) {
+        ownerId = owner._id || owner.id;
+        resolvedUserType = owner.userType || resolvedUserType;
+      }
     }
 
-    const uniqueCode = 'HW-' + Math.floor(1000 + Math.random() * 9000);
+    const uniqueCode = 'PA-' + Date.now().toString(36).toUpperCase() + '-' + Math.floor(100 + Math.random() * 900);
 
     // If an admin posts it, auto-approve. If a user (Owner / Dealer / Builder) posts, set to pending so Admin can review & permit it!
     const initialStatus = authUser?.role === 'admin' ? 'approved' : 'pending';
@@ -309,7 +331,8 @@ export const postPublicProperty = async (req, res) => {
       isFeatured: false,
       isVerified: authUser?.role === 'admin',
       uniqueCode,
-      ownerId,
+      owner: ownerId || null,
+      ownerId: ownerId || null,
     });
 
     res.status(201).json({

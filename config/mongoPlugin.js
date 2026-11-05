@@ -16,11 +16,11 @@ export function translateWhere(where) {
     const val = where[key];
     const keyName = getOpName(key);
 
-    if (keyName === 'or') {
+    if (keyName === 'or' || keyName === '$or') {
       out['$or'] = (Array.isArray(val) ? val : [val]).map(translateWhere);
       continue;
     }
-    if (keyName === 'and') {
+    if (keyName === 'and' || keyName === '$and') {
       out['$and'] = (Array.isArray(val) ? val : [val]).map(translateWhere);
       continue;
     }

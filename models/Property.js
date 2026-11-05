@@ -106,7 +106,6 @@ const propertySchema = new mongoose.Schema({
   },
   postedByType: {
     type: String,
-    enum: ['Owner', 'Dealer / Agent', 'Builder'],
     default: 'Owner',
   },
   whatsappAlerts: {

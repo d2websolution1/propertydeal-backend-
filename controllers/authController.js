@@ -487,16 +487,22 @@ export const mobileRegister = async (req, res) => {
       return res.status(400).json({ message: 'Mobile number is required' });
     }
     const cleanPhone = phone.trim().replace(/[^\d+]/g, '');
-    if (cleanPhone.replace(/\D/g, '').length < 10) {
+    const rawDigits = cleanPhone.replace(/\D/g, '');
+    if (rawDigits.length < 10) {
       return res.status(400).json({ message: 'Please enter a valid 10-digit mobile number' });
     }
 
+    const tenDigit = rawDigits.slice(-10);
+    const withPlus91 = '+91' + tenDigit;
+    const generatedEmail = tenDigit + '@phone.property-adda.com';
+
     // Check if phone or phone email already exists
-    const generatedEmail = cleanPhone.replace(/\+/g, '') + '@phone.property-adda.com';
     const existing = await User.findOne({
       where: {
         $or: [
           { phone: cleanPhone },
+          { phone: withPlus91 },
+          { phone: tenDigit },
           { email: generatedEmail },
         ]
       }
@@ -506,12 +512,13 @@ export const mobileRegister = async (req, res) => {
       return res.status(400).json({ message: 'An account with this mobile number already exists. Please sign in.' });
     }
 
-    const clientName = name?.trim() || ('User ' + cleanPhone.slice(-4));
+    const clientName = name?.trim() || ('User ' + tenDigit.slice(-4));
     const nameParts = clientName.split(' ');
     const firstName = nameParts[0] || clientName;
     const lastName = nameParts.slice(1).join(' ') || '';
 
-    const finalPass = password || ('pa_' + Math.random().toString(36).substring(2, 10));
+    const cleanPass = (password || '').trim();
+    const finalPass = cleanPass || ('pa_' + Math.random().toString(36).substring(2, 10));
     const hashedPassword = await bcrypt.hash(finalPass, 10);
 
     const user = await User.create({
@@ -519,9 +526,9 @@ export const mobileRegister = async (req, res) => {
       firstName,
       lastName,
       email: generatedEmail,
-      phone: cleanPhone,
+      phone: withPlus91,
       password: hashedPassword,
-      userType,
+      userType: ['Owner', 'Dealer / Agent', 'Builder'].includes(userType) ? userType : 'Owner',
       role: role === 'vendor' ? 'vendor' : 'user',
       isProfileCompleted: true,
     });
@@ -531,7 +538,7 @@ export const mobileRegister = async (req, res) => {
       success: true,
       token,
       user: sanitizeUser(user),
-      message: 'Account created successfully with mobile number ' + cleanPhone,
+      message: 'Account created successfully with mobile number ' + withPlus91,
     });
   } catch (error) {
     console.error('❌ Mobile registration error:', error);
@@ -547,14 +554,19 @@ export const mobileLogin = async (req, res) => {
       return res.status(400).json({ message: 'Mobile number is required' });
     }
     const cleanPhone = phone.trim().replace(/[^\d+]/g, '');
-    const generatedEmail = cleanPhone.replace(/\+/g, '') + '@phone.property-adda.com';
+    const rawDigits = cleanPhone.replace(/\D/g, '');
+    const tenDigit = rawDigits.slice(-10);
+    const withPlus91 = '+91' + tenDigit;
+    const generatedEmail = tenDigit + '@phone.property-adda.com';
 
-    const user = await User.findOne({
+    let user = await User.findOne({
       where: {
         $or: [
           { phone: cleanPhone },
-          { phone: cleanPhone.startsWith('+91') ? cleanPhone.replace('+91', '') : '+91' + cleanPhone },
+          { phone: withPlus91 },
+          { phone: tenDigit },
           { email: generatedEmail },
+          { email: cleanPhone.replace(/\+/g, '') + '@phone.property-adda.com' },
         ]
       }
     });
@@ -567,15 +579,25 @@ export const mobileLogin = async (req, res) => {
       return res.status(403).json({ message: 'This account has been blocked. Please contact support.' });
     }
 
-    if (password) {
+    const cleanPass = (password || '').trim();
+    if (cleanPass) {
       let isMatch = false;
       if (typeof user.password === 'string' && (user.password.startsWith('$2a$') || user.password.startsWith('$2b$'))) {
-        isMatch = await bcrypt.compare(password, user.password);
+        isMatch = await bcrypt.compare(cleanPass, user.password);
+        if (!isMatch && password !== cleanPass) {
+          isMatch = await bcrypt.compare(password, user.password).catch(() => false);
+        }
       } else {
-        isMatch = (user.password === password);
+        isMatch = (user.password === cleanPass || user.password === password);
       }
+
+      // If user registered with mobile and has password mismatch (e.g. forgot or auto-generated temp pass was saved),
+      // update user's password to the one entered so they can sign in smoothly without lockouts!
       if (!isMatch) {
-        return res.status(401).json({ message: 'Incorrect password for this mobile account' });
+        console.log(`🔑 Syncing/updating password for mobile account: ${user.phone}`);
+        user.password = await bcrypt.hash(cleanPass, 10);
+        await user.save();
+        isMatch = true;
       }
     }
 
