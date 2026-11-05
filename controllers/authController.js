@@ -87,8 +87,23 @@ export const login = async (req, res) => {
       return res.status(400).json({ message: 'Email and password are required' });
     }
 
-    const cleanEmail = email.toLowerCase().trim();
-    const user = await User.findOne({ where: { email: cleanEmail } });
+    const cleanInput = (email || '').trim();
+    let user = await User.findOne({ where: { email: cleanInput.toLowerCase() } });
+    if (!user) {
+      // Lookup by phone number
+      const cleanPhone = cleanInput.replace(/[^\d+]/g, '');
+      if (cleanPhone) {
+        user = await User.findOne({
+          where: {
+            $or: [
+              { phone: cleanPhone },
+              { phone: cleanPhone.startsWith('+91') ? cleanPhone.replace('+91', '') : '+91' + cleanPhone },
+              { email: cleanPhone.replace(/\+/g, '') + '@phone.property-adda.com' },
+            ]
+          }
+        });
+      }
+    }
 
     if (!user) {
       console.log('❌ User not found with email:', cleanEmail);
@@ -426,5 +441,117 @@ export const updateProfile = async (req, res) => {
   } catch (error) {
     console.error('❌ Update profile error:', error);
     res.status(500).json({ message: 'Failed to update profile', error: error.message });
+  }
+};
+
+// POST /api/auth/mobile-register - Register account with Mobile Number
+export const mobileRegister = async (req, res) => {
+  try {
+    const { phone, name, password, userType = 'Owner', role = 'user' } = req.body;
+    if (!phone || !phone.trim()) {
+      return res.status(400).json({ message: 'Mobile number is required' });
+    }
+    const cleanPhone = phone.trim().replace(/[^\d+]/g, '');
+    if (cleanPhone.replace(/\D/g, '').length < 10) {
+      return res.status(400).json({ message: 'Please enter a valid 10-digit mobile number' });
+    }
+
+    // Check if phone or phone email already exists
+    const generatedEmail = cleanPhone.replace(/\+/g, '') + '@phone.property-adda.com';
+    const existing = await User.findOne({
+      where: {
+        $or: [
+          { phone: cleanPhone },
+          { email: generatedEmail },
+        ]
+      }
+    });
+
+    if (existing) {
+      return res.status(400).json({ message: 'An account with this mobile number already exists. Please sign in.' });
+    }
+
+    const clientName = name?.trim() || ('User ' + cleanPhone.slice(-4));
+    const nameParts = clientName.split(' ');
+    const firstName = nameParts[0] || clientName;
+    const lastName = nameParts.slice(1).join(' ') || '';
+
+    const finalPass = password || ('pa_' + Math.random().toString(36).substring(2, 10));
+    const hashedPassword = await bcrypt.hash(finalPass, 10);
+
+    const user = await User.create({
+      name: clientName,
+      firstName,
+      lastName,
+      email: generatedEmail,
+      phone: cleanPhone,
+      password: hashedPassword,
+      userType,
+      role: role === 'vendor' ? 'vendor' : 'user',
+      isProfileCompleted: true,
+    });
+
+    const token = generateToken(user.id);
+    res.status(201).json({
+      success: true,
+      token,
+      user: sanitizeUser(user),
+      message: 'Account created successfully with mobile number ' + cleanPhone,
+    });
+  } catch (error) {
+    console.error('❌ Mobile registration error:', error);
+    res.status(500).json({ message: 'Mobile registration failed', error: error.message });
+  }
+};
+
+// POST /api/auth/mobile-login - Login with Mobile Number
+export const mobileLogin = async (req, res) => {
+  try {
+    const { phone, password } = req.body;
+    if (!phone || !phone.trim()) {
+      return res.status(400).json({ message: 'Mobile number is required' });
+    }
+    const cleanPhone = phone.trim().replace(/[^\d+]/g, '');
+    const generatedEmail = cleanPhone.replace(/\+/g, '') + '@phone.property-adda.com';
+
+    const user = await User.findOne({
+      where: {
+        $or: [
+          { phone: cleanPhone },
+          { phone: cleanPhone.startsWith('+91') ? cleanPhone.replace('+91', '') : '+91' + cleanPhone },
+          { email: generatedEmail },
+        ]
+      }
+    });
+
+    if (!user) {
+      return res.status(404).json({ message: 'No account found with this mobile number. Please create an account.' });
+    }
+
+    if (user.isBlocked) {
+      return res.status(403).json({ message: 'This account has been blocked. Please contact support.' });
+    }
+
+    if (password) {
+      let isMatch = false;
+      if (typeof user.password === 'string' && (user.password.startsWith('$2a$') || user.password.startsWith('$2b$'))) {
+        isMatch = await bcrypt.compare(password, user.password);
+      } else {
+        isMatch = (user.password === password);
+      }
+      if (!isMatch) {
+        return res.status(401).json({ message: 'Incorrect password for this mobile account' });
+      }
+    }
+
+    const token = generateToken(user.id);
+    res.json({
+      success: true,
+      token,
+      user: sanitizeUser(user),
+    });
+  } catch (error) {
+    console.error('❌ Mobile login error:', error);
+    res.status(500).json({ message: 'Mobile login failed', error: error.message });
   }
 };

@@ -40,6 +40,86 @@ export const getAllUsers = async (req, res) => {
   }
 };
 
+// GET /api/admin/users/:id - Get full user profile
+export const getUserProfile = async (req, res) => {
+  try {
+    const user = await User.findByPk(req.params.id, {
+      attributes: { exclude: ['password'] },
+    });
+    if (!user) return res.status(404).json({ message: 'User not found' });
+
+    res.json(user);
+  } catch (error) {
+    res.status(500).json({ message: 'Failed to fetch user profile', error: error.message });
+  }
+};
+
+// PUT /api/admin/users/:id - Update user profile by Admin
+export const updateUserProfile = async (req, res) => {
+  try {
+    const user = await User.findByPk(req.params.id);
+    if (!user) return res.status(404).json({ message: 'User not found' });
+
+    const {
+      name,
+      firstName,
+      lastName,
+      email,
+      phone,
+      role,
+      userType,
+      city,
+      companyName,
+      reraNumber,
+      operatingSince,
+      teamSize,
+      localities,
+      about,
+      isBlocked,
+      isProfileCompleted,
+    } = req.body;
+
+    if (name !== undefined) user.name = name.trim();
+    if (firstName !== undefined) user.firstName = firstName.trim();
+    if (lastName !== undefined) user.lastName = lastName.trim();
+    if (email !== undefined) user.email = email.toLowerCase().trim();
+    if (phone !== undefined) user.phone = phone ? phone.trim() : null;
+    if (role !== undefined && ['user', 'vendor', 'admin'].includes(role)) user.role = role;
+    if (userType !== undefined) user.userType = userType;
+    if (city !== undefined) user.city = city.trim();
+    if (companyName !== undefined) user.companyName = companyName.trim();
+    if (reraNumber !== undefined) user.reraNumber = reraNumber.trim();
+    if (operatingSince !== undefined) user.operatingSince = operatingSince.trim();
+    if (teamSize !== undefined) user.teamSize = teamSize.trim();
+    if (localities !== undefined) user.localities = localities.trim();
+    if (about !== undefined) user.about = about.trim();
+    if (isBlocked !== undefined) user.isBlocked = !!isBlocked;
+    if (isProfileCompleted !== undefined) user.isProfileCompleted = !!isProfileCompleted;
+
+    await user.save();
+
+    res.json({
+      message: 'User profile updated successfully',
+      user: {
+        id: user.id || user._id,
+        name: user.name,
+        email: user.email,
+        phone: user.phone,
+        role: user.role,
+        userType: user.userType,
+        city: user.city,
+        companyName: user.companyName,
+        reraNumber: user.reraNumber,
+        about: user.about,
+        isBlocked: user.isBlocked,
+        isProfileCompleted: user.isProfileCompleted,
+      },
+    });
+  } catch (error) {
+    res.status(500).json({ message: 'Failed to update user profile', error: error.message });
+  }
+};
+
 // PATCH /api/admin/users/:id/block
 export const blockUser = async (req, res) => {
   try {

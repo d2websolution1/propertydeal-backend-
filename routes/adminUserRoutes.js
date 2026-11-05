@@ -3,6 +3,8 @@ import express from 'express';
 import { protect, adminOnly } from '../middleware/authMiddleware.js';
 import {
   getAllUsers,
+  getUserProfile,
+  updateUserProfile,
   blockUser,
   unblockUser,
   deleteUser,
@@ -14,6 +16,8 @@ const router = express.Router();
 router.use(protect, adminOnly);
 
 router.get('/', getAllUsers);
+router.get('/:id', getUserProfile);
+router.put('/:id', updateUserProfile);
 router.patch('/:id/block', blockUser);
 router.patch('/:id/unblock', unblockUser);
 router.delete('/:id', deleteUser);
