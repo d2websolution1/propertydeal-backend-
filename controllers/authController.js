@@ -5,7 +5,7 @@ import User from '../models/User.js';
 import { sendOtpEmail } from '../utils/emailService.js';
 
 const generateToken = (userId) => {
-  return jwt.sign({ id: userId }, process.env.JWT_SECRET || 'homeswale-secret-key-2025', {
+  return jwt.sign({ id: userId }, process.env.JWT_SECRET || 'property-adda-secret-key-2025', {
     expiresIn: '30d',
   });
 };
@@ -360,7 +360,7 @@ export const instantGmailAuth = async (req, res) => {
   }
 };
 
-// PUT /api/auth/profile - Update user profile (HomesWale reference: Owner / Dealer-Agent / Builder)
+// PUT /api/auth/profile - Update user profile (Property Adda reference: Owner / Dealer-Agent / Builder)
 export const updateProfile = async (req, res) => {
   try {
     const userId = req.user.id;
