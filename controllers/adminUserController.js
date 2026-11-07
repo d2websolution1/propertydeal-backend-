@@ -77,6 +77,11 @@ export const updateUserProfile = async (req, res) => {
       about,
       isBlocked,
       isProfileCompleted,
+      isVerifiedAgent,
+      agentRequestStatus,
+      listingLimit,
+      featuredLimit,
+      activePlan,
     } = req.body;
 
     if (name !== undefined) user.name = name.trim();
@@ -95,6 +100,11 @@ export const updateUserProfile = async (req, res) => {
     if (about !== undefined) user.about = about.trim();
     if (isBlocked !== undefined) user.isBlocked = !!isBlocked;
     if (isProfileCompleted !== undefined) user.isProfileCompleted = !!isProfileCompleted;
+    if (isVerifiedAgent !== undefined) user.isVerifiedAgent = !!isVerifiedAgent;
+    if (agentRequestStatus !== undefined) user.agentRequestStatus = agentRequestStatus;
+    if (listingLimit !== undefined) user.listingLimit = Number(listingLimit);
+    if (featuredLimit !== undefined) user.featuredLimit = Number(featuredLimit);
+    if (activePlan !== undefined) user.activePlan = activePlan;
 
     await user.save();
 
@@ -107,6 +117,11 @@ export const updateUserProfile = async (req, res) => {
         phone: user.phone,
         role: user.role,
         userType: user.userType,
+        isVerifiedAgent: user.isVerifiedAgent,
+        agentRequestStatus: user.agentRequestStatus,
+        listingLimit: user.listingLimit,
+        featuredLimit: user.featuredLimit,
+        activePlan: user.activePlan,
         city: user.city,
         companyName: user.companyName,
         reraNumber: user.reraNumber,

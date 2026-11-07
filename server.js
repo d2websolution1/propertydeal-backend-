@@ -52,6 +52,8 @@ import adminBulkMessageRoutes from './routes/adminBulkMessageRoutes.js';
 import adminBillingRoutes from './routes/adminBillingRoutes.js';
 import locationRoutes from './routes/locationRoutes.js';
 import adminLocationRoutes from './routes/adminLocationRoutes.js';
+import subscriptionRoutes from './routes/subscriptionRoutes.js';
+import userRoutes from './routes/userRoutes.js';
 
 dotenv.config();
 
@@ -135,6 +137,10 @@ app.use('/api/admin/subscriptions', adminBillingRoutes);
 // ── Locations Management (Cities & Areas) ──
 app.use('/api/locations', locationRoutes);
 app.use('/api/admin/locations', adminLocationRoutes);
+
+// ── Subscriptions & User Features ──
+app.use('/api/subscriptions', subscriptionRoutes);
+app.use('/api/users', userRoutes);
 
 const PORT = process.env.PORT || 5000;
 

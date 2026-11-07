@@ -37,6 +37,10 @@ const subscriptionSchema = new mongoose.Schema(
       type: Number,
       default: 1,
     },
+    validityDays: {
+      type: Number,
+      default: 30,
+    },
     features: {
       type: [String],
       default: [],

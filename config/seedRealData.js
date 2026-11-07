@@ -13,62 +13,71 @@ export async function seedRealDatabaseData() {
     const existingUsers = await User.find({});
     const existingProperties = await Property.find({});
 
-    // 1. Seed Real Subscriptions if empty
-    const subCount = await Subscription.countDocuments();
-    if (subCount === 0) {
-      console.log('🌱 Seeding real subscription plans to MongoDB Atlas...');
-      await Subscription.create([
-        {
-          name: 'Owner Free Starter',
-          tier: 'free',
-          targetAudience: 'Owner',
-          price: 0,
-          billingCycle: 'one-time',
-          listingLimit: 2,
-          featuredLimit: 0,
-          features: ['Post up to 2 Properties Free', 'Direct Buyer Phone & WhatsApp', 'Standard 30 Days Visibility'],
-          badge: 'Basic',
-          isActive: true,
-        },
-        {
-          name: 'Owner Fast-Track Verified',
-          tier: 'silver',
-          targetAudience: 'Owner',
-          price: 999,
-          billingCycle: 'one-time',
-          listingLimit: 5,
-          featuredLimit: 1,
-          features: ['Verified Green Shield Badge', 'Top 5 in Search Results', 'Instant WhatsApp Inquiries Alert', '45 Days Validity'],
-          badge: 'Popular',
-          isActive: true,
-        },
-        {
-          name: 'Dealer / Agent Pro Pack',
-          tier: 'gold',
-          targetAudience: 'Dealer / Agent',
-          price: 4999,
-          billingCycle: 'monthly',
-          listingLimit: 30,
-          featuredLimit: 5,
-          features: ['Up to 30 Active Listings', '5 Featured Boost Slots', 'Direct RERA & Company Branding', 'CRM Leads Manager', 'Priority Customer Support'],
-          badge: 'Recommended',
-          isActive: true,
-        },
-        {
-          name: 'Builder Mega Township Enterprise',
-          tier: 'platinum',
-          targetAudience: 'Builder',
-          price: 14999,
-          billingCycle: 'monthly',
-          listingLimit: 100,
-          featuredLimit: 20,
-          features: ['Unlimited Floor Plans & Videos', 'Homepage Top Carousel Banner', 'Dedicated Relationship Manager', 'SMS / Email Lead Blasts', 'Verified Developer Blue Tick'],
-          badge: 'Enterprise',
-          isActive: true,
-        },
-      ]);
-      console.log('✅ Real subscription tiers seeded in MongoDB!');
+    // 1. Seed Real Subscriptions matching client requirements
+    const standardPlans = [
+      {
+        name: 'फ्री में दो लिस्टिंग for 1 month',
+        tier: 'free',
+        targetAudience: 'All',
+        price: 0,
+        billingCycle: 'monthly',
+        listingLimit: 2,
+        featuredLimit: 0,
+        validityDays: 30,
+        features: ['फ्री में दो लिस्टिंग for 1 month', 'Direct Buyer Phone & WhatsApp Leads', 'Standard 30 Days Visibility'],
+        badge: 'Free Starter',
+        isActive: true,
+      },
+      {
+        name: '₹99 में 1 featured लिस्टिंग',
+        tier: 'silver',
+        targetAudience: 'All',
+        price: 99,
+        billingCycle: 'monthly',
+        listingLimit: 1,
+        featuredLimit: 1,
+        validityDays: 30,
+        features: ['₹99 में 1 featured लिस्टिंग', 'Top Search Placement', 'Golden Star Featured Tag', '30 Days Boost Visibility'],
+        badge: 'Featured Boost',
+        isActive: true,
+      },
+      {
+        name: '₹499 में 10 लिस्टिंग for 3 months',
+        tier: 'gold',
+        targetAudience: 'Dealer / Agent',
+        price: 499,
+        billingCycle: 'quarterly',
+        listingLimit: 10,
+        featuredLimit: 2,
+        validityDays: 90,
+        features: ['₹499 में 10 लिस्टिंग for 3 months (90 days)', '2 Featured Boost Slots', 'Verified Agent Badge', 'Priority Client Enquiries'],
+        badge: 'Recommended',
+        isActive: true,
+      },
+      {
+        name: '₹999 में 30 लिस्टिंग for 9 months',
+        tier: 'platinum',
+        targetAudience: 'Dealer / Agent',
+        price: 999,
+        billingCycle: 'yearly',
+        listingLimit: 30,
+        featuredLimit: 5,
+        validityDays: 270,
+        features: ['₹999 में 30 लिस्टिंग for 9 months (270 days)', '5 Featured Boost Slots', 'Verified Agency Badge', 'Relationship Manager', 'Unlimited Buyer Calls'],
+        badge: 'Best Value',
+        isActive: true,
+      },
+    ];
+
+    for (const plan of standardPlans) {
+      const exists = await Subscription.findOne({ name: plan.name });
+      if (!exists) {
+        await Subscription.create(plan);
+      } else {
+        await Subscription.updateOne({ _id: exists._id }, { $set: plan });
+      }
     }
+    console.log('✅ Real subscription plans synchronized with MongoDB!');
 
     // 2. Seed Real Payments if empty
     const paymentCount = await Payment.countDocuments();

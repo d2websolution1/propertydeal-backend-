@@ -24,6 +24,111 @@ const propertySchema = new mongoose.Schema({
     type: String,
     default: 'sale',
   },
+  purpose: {
+    type: String,
+    enum: ['sale', 'rent'],
+    default: 'sale',
+  },
+  propertyCategory: {
+    type: String,
+    enum: ['Residential', 'Commercial'],
+    default: 'Residential',
+  },
+  otherPropertyType: {
+    type: String,
+    default: '',
+  },
+  sizeType: {
+    type: String,
+    enum: ['Plot Area', 'Carpet Area', 'Super Built-up Area'],
+    default: 'Carpet Area',
+  },
+  size: {
+    type: Number,
+    default: null,
+  },
+  sizeUnit: {
+    type: String,
+    enum: ['sqft', 'sq yard', 'acre'],
+    default: 'sqft',
+  },
+  plotFrontFt: {
+    type: Number,
+    default: null,
+  },
+  plotDepthFt: {
+    type: Number,
+    default: null,
+  },
+  frontRoadFt: {
+    type: Number,
+    default: null,
+  },
+  isCorner: {
+    type: Boolean,
+    default: false,
+  },
+  isParkFacing: {
+    type: Boolean,
+    default: false,
+  },
+  isTwoSideOpen: {
+    type: Boolean,
+    default: false,
+  },
+  facing: {
+    type: [String],
+    default: [],
+  },
+  pricePerUnit: {
+    type: Number,
+    default: null,
+  },
+  constructionStatus: {
+    type: String,
+    enum: ['Ready to move', 'Under construction'],
+    default: 'Ready to move',
+  },
+  facilities: {
+    type: [String],
+    default: [],
+  },
+  bedrooms: {
+    type: String,
+    default: '',
+  },
+  bathrooms: {
+    type: String,
+    default: '',
+  },
+  hall: {
+    type: String,
+    default: '',
+  },
+  kitchen: {
+    type: String,
+    default: '',
+  },
+  balcony: {
+    type: String,
+    default: '',
+  },
+  parking: {
+    type: [String],
+    default: [],
+  },
+  featuredImage: {
+    type: String,
+    default: '',
+  },
+  areas: {
+    type: [String],
+    default: [],
+  },
+  subAreas: {
+    type: [String],
+    default: [],
+  },
   state: {
     type: String,
     default: 'Uttar Pradesh',

@@ -32,15 +32,28 @@ export const sanitizeUser = (user) => ({
   dealsIn: user.dealsIn || [],
   about: user.about || '',
   isProfileCompleted: !!user.isProfileCompleted,
+  favorites: user.favorites || [],
+  activePlan: user.activePlan || 'Free Starter (फ्री में 2 लिस्टिंग)',
+  listingLimit: user.listingLimit !== undefined ? user.listingLimit : 2,
+  featuredLimit: user.featuredLimit || 0,
+  planExpiresAt: user.planExpiresAt || null,
+  isVerifiedAgent: !!user.isVerifiedAgent,
+  agentRequestStatus: user.agentRequestStatus || 'none',
+  agentRequestDetails: user.agentRequestDetails || null,
 });
 
 // POST /api/auth/register
 export const register = async (req, res) => {
   try {
-    const { name, email, password, role, phone } = req.body;
+    const { name, email, password, role, phone, userType = 'Owner' } = req.body;
 
     if (!name || !email || !password) {
       return res.status(400).json({ message: 'Name, email and password are required' });
+    }
+
+    const rawPhoneDigits = (phone || '').replace(/\D/g, '');
+    if (!rawPhoneDigits || rawPhoneDigits.length < 10) {
+      return res.status(400).json({ message: 'Phone number is mandatory for Owner and Agent registration' });
     }
 
     const cleanEmail = email.toLowerCase().trim();
@@ -49,11 +62,15 @@ export const register = async (req, res) => {
       return res.status(400).json({ message: 'An account with this email already exists' });
     }
 
+    const cleanPhone = rawPhoneDigits.length === 10 ? `+91${rawPhoneDigits}` : `+${rawPhoneDigits}`;
+
     const nameParts = name.trim().split(' ');
     const firstName = nameParts[0] || name.trim();
     const lastName = nameParts.slice(1).join(' ') || '';
 
     const hashedPassword = await bcrypt.hash(password, 10);
+
+    const resolvedUserType = ['Owner', 'Dealer / Agent', 'Builder'].includes(userType) ? userType : 'Owner';
 
     const user = await User.create({
       name: name.trim(),
@@ -61,8 +78,13 @@ export const register = async (req, res) => {
       lastName,
       email: cleanEmail,
       password: hashedPassword,
-      phone: phone || null,
+      phone: cleanPhone,
+      userType: resolvedUserType,
       role: role === 'vendor' ? 'vendor' : (role === 'admin' ? 'admin' : 'user'),
+      activePlan: 'Free Starter (फ्री में 2 लिस्टिंग)',
+      listingLimit: 2,
+      featuredLimit: 0,
+      planExpiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
     });
 
     const token = generateToken(user.id);
@@ -355,7 +377,7 @@ export const googleAuth = async (req, res) => {
 // POST /api/auth/instant-gmail - Instant Gmail login / account create WITHOUT ANY OTP
 export const instantGmailAuth = async (req, res) => {
   try {
-    const { email, name, avatar } = req.body;
+    const { email, name, avatar, phone, userType } = req.body;
 
     if (!email) {
       return res.status(400).json({ message: 'Gmail address is required' });
@@ -378,9 +400,10 @@ export const instantGmailAuth = async (req, res) => {
         lastName,
         email: cleanEmail,
         password: generatedPassword,
+        phone: phone ? phone.trim() : null,
         avatar: avatar || '',
         role: 'user',
-        userType: 'Owner',
+        userType: userType || 'Owner',
         isProfileCompleted: true,
       });
       console.log(`🎉 Instant Gmail user account registered without OTP: ${cleanEmail}`);
@@ -388,6 +411,14 @@ export const instantGmailAuth = async (req, res) => {
       isExistingUser = true;
       if (user.isBlocked) {
         return res.status(403).json({ message: 'This account has been blocked. Please contact support.' });
+      }
+      if (phone && !user.phone) {
+        user.phone = phone.trim();
+        await user.save();
+      }
+      if (userType && user.userType !== userType) {
+        user.userType = userType;
+        await user.save();
       }
       if (avatar && !user.avatar) {
         await user.update({ avatar });

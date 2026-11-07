@@ -99,6 +99,43 @@ const userSchema = new mongoose.Schema({
     type: Boolean,
     default: false,
   },
+  favorites: {
+    type: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Property' }],
+    default: [],
+  },
+  activePlan: {
+    type: String,
+    default: 'Free Starter (फ्री में 2 लिस्टिंग)',
+  },
+  listingLimit: {
+    type: Number,
+    default: 2,
+  },
+  featuredLimit: {
+    type: Number,
+    default: 0,
+  },
+  planExpiresAt: {
+    type: Date,
+    default: () => new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+  },
+  isVerifiedAgent: {
+    type: Boolean,
+    default: false,
+  },
+  agentRequestStatus: {
+    type: String,
+    enum: ['none', 'pending', 'approved', 'rejected'],
+    default: 'none',
+  },
+  agentRequestDetails: {
+    companyName: { type: String, default: '' },
+    reraNumber: { type: String, default: '' },
+    city: { type: String, default: '' },
+    experience: { type: String, default: '' },
+    operatingLocalities: { type: String, default: '' },
+    requestedAt: { type: Date, default: null },
+  },
 }, {
   timestamps: true,
   collection: 'users',

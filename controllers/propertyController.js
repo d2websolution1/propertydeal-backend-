@@ -9,14 +9,22 @@ export const getPublicProperties = async (req, res) => {
   try {
     const {
       listingType,
+      purpose,
+      propertyCategory,
       propertyType,
       city,
+      area,
+      locality,
       bhk,
+      bedrooms,
       minPrice,
       maxPrice,
+      furnishing,
+      constructionStatus,
       q,
       isFeatured,
-      limit = 20,
+      isVerified,
+      limit = 30,
       offset = 0,
     } = req.query;
 
@@ -24,8 +32,16 @@ export const getPublicProperties = async (req, res) => {
       status: 'approved',
     };
 
-    if (listingType && listingType !== 'all') {
-      where.listingType = listingType;
+    const finalPurpose = purpose || listingType;
+    if (finalPurpose && finalPurpose !== 'all') {
+      where[Op.or] = [
+        { listingType: finalPurpose },
+        { purpose: finalPurpose },
+      ];
+    }
+
+    if (propertyCategory && propertyCategory !== 'all') {
+      where.propertyCategory = propertyCategory;
     }
 
     if (propertyType && propertyType !== 'all') {
@@ -36,12 +52,39 @@ export const getPublicProperties = async (req, res) => {
       where.city = { [Op.like]: `%${city}%` };
     }
 
-    if (bhk && bhk !== 'all') {
-      where.bhk = { [Op.like]: `%${bhk}%` };
+    const areaQuery = area || locality;
+    if (areaQuery && areaQuery !== 'all') {
+      where[Op.or] = [
+        ...(where[Op.or] || []),
+        { locality: { [Op.like]: `%${areaQuery}%` } },
+        { projectName: { [Op.like]: `%${areaQuery}%` } },
+        { areas: { [Op.like]: `%${areaQuery}%` } },
+      ];
+    }
+
+    const bedroomQuery = bedrooms || bhk;
+    if (bedroomQuery && bedroomQuery !== 'all') {
+      where[Op.or] = [
+        ...(where[Op.or] || []),
+        { bhk: { [Op.like]: `%${bedroomQuery}%` } },
+        { bedrooms: { [Op.like]: `%${bedroomQuery}%` } },
+      ];
+    }
+
+    if (furnishing && furnishing !== 'all') {
+      where.furnishing = furnishing;
+    }
+
+    if (constructionStatus && constructionStatus !== 'all') {
+      where.constructionStatus = constructionStatus;
     }
 
     if (isFeatured === 'true') {
       where.isFeatured = true;
+    }
+
+    if (isVerified === 'true') {
+      where.isVerified = true;
     }
 
     if (minPrice || maxPrice) {
@@ -52,10 +95,12 @@ export const getPublicProperties = async (req, res) => {
 
     if (q) {
       where[Op.or] = [
+        ...(where[Op.or] || []),
         { title: { [Op.like]: `%${q}%` } },
         { locality: { [Op.like]: `%${q}%` } },
         { city: { [Op.like]: `%${q}%` } },
         { propertyType: { [Op.like]: `%${q}%` } },
+        { projectName: { [Op.like]: `%${q}%` } },
         { bhk: { [Op.like]: `%${q}%` } },
         { description: { [Op.like]: `%${q}%` } },
       ];
@@ -63,14 +108,14 @@ export const getPublicProperties = async (req, res) => {
 
     const { rows: properties, count } = await Property.findAndCountAll({
       where,
-      limit: Math.min(Number(limit) || 20, 100),
+      limit: Math.min(Number(limit) || 30, 100),
       offset: Number(offset) || 0,
       order: [['isFeatured', 'DESC'], ['createdAt', 'DESC']],
       include: [
         {
           model: User,
           as: 'owner',
-          attributes: ['id', 'name', 'email', 'phone', 'role', 'userType', 'companyName'],
+          attributes: ['id', 'name', 'email', 'phone', 'role', 'userType', 'companyName', 'isVerifiedAgent'],
         },
       ],
     });
@@ -181,22 +226,46 @@ export const postPublicProperty = async (req, res) => {
       title,
       description,
       price,
-      propertyType,
+      purpose,
       listingType,
+      propertyCategory,
+      propertyType,
+      otherPropertyType,
+      sizeType,
+      size,
+      areaSqft,
+      sizeUnit,
+      plotFrontFt,
+      plotDepthFt,
+      frontRoadFt,
+      isCorner,
+      isParkFacing,
+      isTwoSideOpen,
+      facing,
+      constructionStatus,
+      furnishing,
+      facilities,
+      amenities,
+      bedrooms,
+      bathrooms,
+      hall,
+      kitchen,
+      balcony,
+      parking,
+      images,
+      featuredImage,
       state,
       city,
       locality,
+      areas,
+      subAreas,
       projectName,
       pincode,
       address,
       bhk,
-      areaSqft,
       bookingAmount,
       maintenanceCharges,
       isNegotiable,
-      furnishing,
-      amenities,
-      images,
       reraNumber,
       contactName,
       whatsappAlerts,
@@ -210,19 +279,6 @@ export const postPublicProperty = async (req, res) => {
     if (!price || !city) {
       return res.status(400).json({ success: false, message: 'Price and city are required' });
     }
-
-    // Auto generate clear title if left blank
-    const autoTitle =
-      title?.trim() ||
-      [
-        bhk || '',
-        propertyType || 'Residential Property',
-        projectName ? `in ${projectName}` : '',
-        locality ? locality : '',
-        city ? city : '',
-      ]
-        .filter(Boolean)
-        .join(' ');
 
     // 1. Check for logged in user via Authorization Bearer token
     let authUser = null;
@@ -238,6 +294,44 @@ export const postPublicProperty = async (req, res) => {
         // token invalid or expired, continue with email lookup
       }
     }
+
+    // Check Listing Quota for logged in user (if not admin)
+    if (authUser && authUser.role !== 'admin') {
+      const userActiveListingsCount = await Property.countDocuments({
+        $or: [
+          { owner: authUser._id },
+          ...(authUser.email ? [{ ownerEmail: authUser.email.toLowerCase() }] : []),
+        ],
+      });
+
+      const allowedLimit = authUser.listingLimit !== undefined ? authUser.listingLimit : 2;
+      if (userActiveListingsCount >= allowedLimit) {
+        return res.status(403).json({
+          success: false,
+          quotaExceeded: true,
+          message: `Listing limit reached! You have already posted ${userActiveListingsCount} of ${allowedLimit} allowed properties on your current plan (${authUser.activePlan || 'Free Plan'}). Please subscribe to a plan to list more properties.`,
+        });
+      }
+    }
+
+    const finalPurpose = purpose || listingType || 'sale';
+    const finalSize = Number(size) || Number(areaSqft) || null;
+    const finalPrice = Number(price);
+    const calculatedPerUnit = finalPrice && finalSize && finalSize > 0 ? Math.round(finalPrice / finalSize) : null;
+
+    // Auto generate clear title if left blank
+    const autoTitle =
+      title?.trim() ||
+      [
+        bedrooms || bhk || '',
+        propertyType === 'Other' && otherPropertyType ? otherPropertyType : (propertyType || 'Residential Property'),
+        finalPurpose === 'rent' ? 'For Rent' : 'For Sale',
+        projectName ? `in ${projectName}` : '',
+        locality || (Array.isArray(areas) ? areas.join(', ') : ''),
+        city ? city : '',
+      ]
+        .filter(Boolean)
+        .join(' ');
 
     let ownerId = null;
     let resolvedUserType = postedByType || 'Owner';
@@ -277,6 +371,8 @@ export const postPublicProperty = async (req, res) => {
             phone: resolvedPhone || null,
             role: 'user',
             userType: resolvedUserType,
+            activePlan: 'Free Starter (फ्री में 2 लिस्टिंग)',
+            listingLimit: 2,
           });
         } catch (createErr) {
           console.warn('Fallback finding existing user after create attempt:', createErr.message);
@@ -291,28 +387,60 @@ export const postPublicProperty = async (req, res) => {
 
     const uniqueCode = 'PA-' + Date.now().toString(36).toUpperCase() + '-' + Math.floor(100 + Math.random() * 900);
 
-    // If an admin posts it, auto-approve. If a user (Owner / Dealer / Builder) posts, set to pending so Admin can review & permit it!
+    // If an admin posts it, auto-approve. If a user posts, set to pending so Admin can review & permit it!
     const initialStatus = authUser?.role === 'admin' ? 'approved' : 'pending';
+
+    const normalizedImages = Array.isArray(images) && images.length
+      ? images
+      : ['https://images.unsplash.com/photo-1560518883-ce09059eeffa?auto=format&fit=crop&w=1200&q=80'];
+
+    const chosenFeaturedImage = featuredImage || normalizedImages[0] || '';
 
     const property = await Property.create({
       title: autoTitle,
       description: description || '',
-      price: Number(price),
-      propertyType: propertyType || 'Apartment',
-      listingType: listingType || 'sale',
-      state: state || 'Uttar Pradesh',
+      price: finalPrice,
+      pricePerUnit: calculatedPerUnit,
+      purpose: finalPurpose,
+      listingType: finalPurpose,
+      propertyCategory: propertyCategory || 'Residential',
+      propertyType: propertyType || 'Flat',
+      otherPropertyType: otherPropertyType || '',
+      sizeType: sizeType || 'Carpet Area',
+      size: finalSize,
+      areaSqft: finalSize,
+      sizeUnit: sizeUnit || 'sqft',
+      plotFrontFt: plotFrontFt ? Number(plotFrontFt) : null,
+      plotDepthFt: plotDepthFt ? Number(plotDepthFt) : null,
+      frontRoadFt: frontRoadFt ? Number(frontRoadFt) : null,
+      isCorner: !!isCorner,
+      isParkFacing: !!isParkFacing,
+      isTwoSideOpen: !!isTwoSideOpen,
+      facing: Array.isArray(facing) ? facing : (facing ? [facing] : []),
+      constructionStatus: constructionStatus || 'Ready to move',
+      furnishing: furnishing || 'Semi-Furnished',
+      facilities: Array.isArray(facilities) ? facilities : [],
+      amenities: Array.isArray(amenities) ? amenities : [],
+      bedrooms: bedrooms || bhk || '',
+      bhk: bedrooms || bhk || '',
+      bathrooms: bathrooms || '',
+      hall: hall || '',
+      kitchen: kitchen || '',
+      balcony: balcony || '',
+      parking: Array.isArray(parking) ? parking : (parking ? [parking] : []),
+      images: normalizedImages,
+      featuredImage: chosenFeaturedImage,
+      state: state || 'Rajasthan',
       city: city.trim(),
-      locality: locality ? locality.trim() : '',
+      locality: locality ? locality.trim() : (Array.isArray(areas) && areas[0] ? areas[0] : ''),
+      areas: Array.isArray(areas) ? areas : (locality ? [locality] : []),
+      subAreas: Array.isArray(subAreas) ? subAreas : [],
       projectName: projectName ? projectName.trim() : '',
       pincode: pincode ? pincode.trim() : '',
       address: address ? address.trim() : '',
-      bhk: bhk || '',
-      areaSqft: areaSqft ? Number(areaSqft) : null,
       bookingAmount: bookingAmount ? Number(bookingAmount) : null,
       maintenanceCharges: maintenanceCharges ? Number(maintenanceCharges) : null,
       isNegotiable: !!isNegotiable,
-      furnishing: furnishing || 'Semi-Furnished',
-      amenities: Array.isArray(amenities) ? amenities : [],
       reraNumber: reraNumber ? reraNumber.trim() : '',
       contactName: resolvedName,
       contactEmail: resolvedEmail,
@@ -323,13 +451,9 @@ export const postPublicProperty = async (req, res) => {
       postedByType: resolvedUserType,
       whatsappAlerts: whatsappAlerts !== undefined ? !!whatsappAlerts : true,
       qualityScore: qualityScore ? Number(qualityScore) : 0,
-      images:
-        Array.isArray(images) && images.length
-          ? images
-          : ['https://images.unsplash.com/photo-1560518883-ce09059eeffa?auto=format&fit=crop&w=1200&q=80'],
       status: initialStatus,
-      isFeatured: false,
-      isVerified: authUser?.role === 'admin',
+      isFeatured: false, // Featured by Admin only
+      isVerified: false, // Verified by Admin only
       uniqueCode,
       owner: ownerId || null,
       ownerId: ownerId || null,
@@ -343,5 +467,7 @@ export const postPublicProperty = async (req, res) => {
   } catch (error) {
     console.error('Error posting property:', error);
     res.status(500).json({ success: false, message: 'Failed to post property', error: error.message });
+  }
+};
   }
 };
