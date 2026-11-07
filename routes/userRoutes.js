@@ -16,3 +16,4 @@ router.post('/request-agent', protect, requestAgentUpgrade);
 router.put('/admin/:id/agent-status', protect, adminOnly, adminUpdateAgentStatus);
 
 export default router;
+

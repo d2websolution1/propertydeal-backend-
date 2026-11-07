@@ -9,3 +9,4 @@ router.get('/plans', getPublicPlans);
 router.post('/subscribe', protect, subscribePlan);
 
 export default router;
+

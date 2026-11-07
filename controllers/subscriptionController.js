@@ -81,3 +81,4 @@ export const subscribePlan = async (req, res) => {
     res.status(500).json({ success: false, message: 'Failed to process subscription', error: error.message });
   }
 };
+
