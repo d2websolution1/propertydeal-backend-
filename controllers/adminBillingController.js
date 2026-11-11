@@ -111,22 +111,58 @@ export const createPayment = async (req, res) => {
 };
 
 // PUT /api/admin/payments/:id
-export const updatePaymentStatus = async (req, res) => {
+export const updatePayment = async (req, res) => {
   try {
-    const { status, notes } = req.body;
+    const {
+      transactionId,
+      userName,
+      userEmail,
+      userPhone,
+      userType,
+      plan,
+      amount,
+      status,
+      paymentMethod,
+      notes,
+    } = req.body;
+
     const payment = await Payment.findById(req.params.id);
     if (!payment) {
-      return res.status(404).json({ message: 'Payment record not found' });
+      return res.status(404).json({ success: false, message: 'Payment record not found' });
     }
 
+    if (transactionId) payment.transactionId = transactionId.trim();
+    if (userName) payment.userName = userName.trim();
+    if (userEmail) payment.userEmail = userEmail.toLowerCase().trim();
+    if (userPhone !== undefined) payment.userPhone = userPhone.trim();
+    if (userType) payment.userType = userType;
+    if (plan) payment.plan = plan.trim();
+    if (amount !== undefined && amount !== null && amount !== '') payment.amount = Number(amount);
     if (status) payment.status = status;
+    if (paymentMethod) payment.paymentMethod = paymentMethod;
     if (notes !== undefined) payment.notes = notes;
 
     await payment.save();
-    res.json({ success: true, payment });
+    res.json({ success: true, payment, message: 'Payment updated successfully' });
   } catch (error) {
     console.error('Error updating payment:', error);
     res.status(500).json({ success: false, message: error.message || 'Update failed' });
+  }
+};
+
+export const updatePaymentStatus = updatePayment;
+
+// DELETE /api/admin/payments/:id
+export const deletePayment = async (req, res) => {
+  try {
+    const payment = await Payment.findByIdAndDelete(req.params.id);
+    if (!payment) {
+      return res.status(404).json({ success: false, message: 'Payment record not found' });
+    }
+    res.json({ success: true, message: 'Payment deleted successfully' });
+  } catch (error) {
+    console.error('Error deleting payment:', error);
+    res.status(500).json({ success: false, message: error.message || 'Delete failed' });
   }
 };
 

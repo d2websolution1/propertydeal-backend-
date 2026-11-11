@@ -56,8 +56,19 @@ const paymentSchema = new mongoose.Schema(
     },
     paymentMethod: {
       type: String,
-      enum: ['UPI', 'Razorpay', 'Card', 'NetBanking', 'Offline / Cash'],
       default: 'UPI',
+    },
+    billingCycle: {
+      type: String,
+      default: '',
+    },
+    paidAt: {
+      type: Date,
+      default: null,
+    },
+    expiresAt: {
+      type: Date,
+      default: null,
     },
     property: {
       type: mongoose.Schema.Types.ObjectId,

@@ -3,7 +3,9 @@ import express from 'express';
 import {
   getAllPayments,
   createPayment,
+  updatePayment,
   updatePaymentStatus,
+  deletePayment,
   getAllSubscriptions,
   createSubscription,
   updateSubscription,
@@ -15,7 +17,8 @@ const router = express.Router();
 // Payments routes
 router.get('/', protect, adminOnly, getAllPayments);
 router.post('/', protect, adminOnly, createPayment);
-router.put('/:id', protect, adminOnly, updatePaymentStatus);
+router.put('/:id', protect, adminOnly, updatePayment);
+router.delete('/:id', protect, adminOnly, deletePayment);
 
 // Subscriptions routes
 router.get('/plans', protect, adminOnly, getAllSubscriptions);
