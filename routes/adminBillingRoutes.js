@@ -19,6 +19,8 @@ router.get('/', protect, adminOnly, getAllPayments);
 router.post('/', protect, adminOnly, createPayment);
 router.put('/:id', protect, adminOnly, updatePayment);
 router.delete('/:id', protect, adminOnly, deletePayment);
+router.post('/:id/delete', protect, adminOnly, deletePayment);
+router.post('/delete/:id', protect, adminOnly, deletePayment);
 
 // Subscriptions routes
 router.get('/plans', protect, adminOnly, getAllSubscriptions);

@@ -1,4 +1,5 @@
 // controllers/adminBillingController.js
+import mongoose from 'mongoose';
 import Payment from '../models/Payment.js';
 import Subscription from '../models/Subscription.js';
 import User from '../models/User.js';
@@ -126,7 +127,15 @@ export const updatePayment = async (req, res) => {
       notes,
     } = req.body;
 
-    const payment = await Payment.findById(req.params.id);
+    const id = req.params.id;
+    let payment = null;
+    if (mongoose.Types.ObjectId.isValid(id)) {
+      payment = await Payment.findById(id);
+    }
+    if (!payment) {
+      payment = await Payment.findOne({ transactionId: id });
+    }
+
     if (!payment) {
       return res.status(404).json({ success: false, message: 'Payment record not found' });
     }
@@ -155,7 +164,15 @@ export const updatePaymentStatus = updatePayment;
 // DELETE /api/admin/payments/:id
 export const deletePayment = async (req, res) => {
   try {
-    const payment = await Payment.findByIdAndDelete(req.params.id);
+    const id = req.params.id;
+    let payment = null;
+    if (mongoose.Types.ObjectId.isValid(id)) {
+      payment = await Payment.findByIdAndDelete(id);
+    }
+    if (!payment) {
+      payment = await Payment.findOneAndDelete({ transactionId: id });
+    }
+
     if (!payment) {
       return res.status(404).json({ success: false, message: 'Payment record not found' });
     }

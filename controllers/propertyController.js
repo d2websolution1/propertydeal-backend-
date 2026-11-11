@@ -469,5 +469,3 @@ export const postPublicProperty = async (req, res) => {
     res.status(500).json({ success: false, message: 'Failed to post property', error: error.message });
   }
 };
-  }
-};
