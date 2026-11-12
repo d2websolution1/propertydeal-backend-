@@ -8,3 +8,4 @@ const router = express.Router();
 router.post('/', createEnquiry);
 
 export default router;
+

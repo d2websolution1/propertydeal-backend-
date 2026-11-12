@@ -228,46 +228,81 @@ export async function seedRealDatabaseData() {
       console.log('✅ Real blog articles seeded in MongoDB Atlas!');
     }
 
-    // 5. Seed Real CMS Pages if empty
-    const cmsCount = await CmsPage.countDocuments();
-    if (cmsCount === 0) {
-      console.log('🌱 Seeding real CMS pages to MongoDB Atlas...');
-      await CmsPage.create([
-        {
-          title: 'About Property Adda',
-          slug: 'about-us',
-          content: 'Property Adda is India\'s premier real estate discovery marketplace connecting property owners, verified dealers, and reputed builders directly with buyers and tenants. With 100% verified listings, zero hidden brokerage, and real-time CRM tools, we make property transactions fast, transparent, and seamless.',
-          metaTitle: 'About Property Adda - India\'s Most Trusted Real Estate Platform',
-          metaDescription: 'Learn about Property Adda mission, leadership, and our commitment to transparent property deals across India.',
-          isPublished: true,
-        },
-        {
-          title: 'Terms & Conditions',
-          slug: 'terms-and-conditions',
-          content: 'By accessing Property Adda, you agree to comply with our platform terms. All property listings must reflect authentic ownership, clear pricing, and accurate photographs. Misleading or duplicate listings will be removed by admin.',
-          metaTitle: 'Terms & Conditions - Property Adda',
-          metaDescription: 'Review terms and user policies for Property Adda listings and client services.',
-          isPublished: true,
-        },
-        {
-          title: 'Privacy Policy',
-          slug: 'privacy-policy',
-          content: 'Your privacy is paramount. Property Adda uses industry-standard 256-bit encryption. Contact details entered during instant Gmail auth are kept secure and shared with verified counterparties strictly for property inquiries.',
-          metaTitle: 'Privacy Policy - Property Adda',
-          metaDescription: 'How Property Adda safeguards your personal and transactional information.',
-          isPublished: true,
-        },
-        {
-          title: 'Contact Support',
-          slug: 'contact-us',
-          content: 'Have questions or need assistance with your property listing? Reach our customer desk at info@property-adda.com or call +91 9672 056 670 / +91 9509 505 892 (Mon-Sat, 9 AM - 7 PM).',
-          metaTitle: 'Contact Us - Property Adda Help Desk',
-          metaDescription: 'Get in touch with Property Adda client support team.',
-          isPublished: true,
-        },
-      ]);
-      console.log('✅ Real CMS pages seeded in MongoDB Atlas!');
+    // 5. Seed Real CMS Pages if empty or update to ensure Property Adda branding & privacy details
+    const cmsPagesToEnsure = [
+      {
+        title: 'About Property Adda',
+        slug: 'about-us',
+        content: `Property Adda is India's premier real estate discovery marketplace connecting property owners, verified dealers, and reputed builders directly with buyers and tenants. With 100% verified listings, zero hidden brokerage, and real-time CRM tools, we make property transactions fast, transparent, and seamless.
+
+Our Mission:
+To empower every Indian home seeker and investor with verified data, transparent direct contact with sellers, and end-to-end guidance from discovery to deal closure.
+
+Key Highlights:
+• Over 71,000+ verified listings across Delhi NCR, Jaipur, Mumbai, Bengaluru and major Indian cities.
+• Zero brokerage direct communication between property owners and genuine buyers.
+• Verified badge certification conducted by our field inspection and document verification team.
+• 24x7 customer support desk and relationship assistance.
+
+──────────────────────────────────────────
+Privacy Policy & User Data Protection:
+At Property Adda, protecting your personal data, contact confidentiality, and maintaining customer trust is our highest priority.
+• 256-Bit SSL Data Encryption: All user accounts, listings, and inquiries are protected with industry-standard 256-bit SSL encryption.
+• Confidential Contact Sharing: Phone numbers and emails are strictly used to connect genuine buyers and sellers. We never sell or rent your contact details to third-party marketing companies.
+• Fraud Prevention: Listings undergo OTP authentication and verification to eliminate spam.
+• Account Rights: You can edit listings from your dashboard or request complete data deletion by emailing info@property-adda.com.`,
+        metaTitle: "About Property Adda - India's Most Trusted Real Estate Platform",
+        metaDescription: 'Learn about Property Adda mission, leadership, and our commitment to transparent property deals across India.',
+        isPublished: true,
+      },
+      {
+        title: 'Terms & Conditions',
+        slug: 'terms-and-conditions',
+        content: 'By accessing Property Adda, you agree to comply with our platform terms. All property listings must reflect authentic ownership, clear pricing, and accurate photographs. Misleading or duplicate listings will be removed by admin.',
+        metaTitle: 'Terms & Conditions - Property Adda',
+        metaDescription: 'Review terms and user policies for Property Adda listings and client services.',
+        isPublished: true,
+      },
+      {
+        title: 'Privacy Policy',
+        slug: 'privacy-policy',
+        content: `At Property Adda, protecting your personal data, privacy, and maintaining customer trust is our top priority.
+
+1. Information We Collect:
+When you register, post properties, or submit inquiries, we may collect your name, email address, phone number, and location preferences. All login credentials and OTP authentications are secured through encrypted protocols.
+
+2. How We Use Your Data:
+• To connect genuine property seekers directly with verified property owners and certified agents.
+• To deliver real-time WhatsApp and SMS alerts regarding inquiries on your listed properties.
+• To verify listing authenticity and eliminate spam, fraudulent ads, or duplicate listings.
+
+3. 256-Bit SSL Data Security:
+All user records, passwords, and transaction audits are encrypted using industry-standard 256-bit SSL protocols. We strictly maintain a ZERO DATA SELLING policy. We never rent, trade, or distribute your phone number or email to external marketing or telemarketing agencies.
+
+4. Account Management & Data Rights:
+You have complete control over your account. You can edit your listings, deactivate properties, or request permanent deletion of your profile and data by emailing info@property-adda.com or calling +91 9672 056 670.`,
+        metaTitle: 'Privacy Policy - Property Adda',
+        metaDescription: 'How Property Adda safeguards your personal and transactional information.',
+        isPublished: true,
+      },
+      {
+        title: 'Contact Support',
+        slug: 'contact-us',
+        content: 'Have questions or need assistance with your property listing? Reach our customer desk at info@property-adda.com or call +91 9672 056 670 / +91 9509 505 892 (Mon-Sat, 9 AM - 7 PM).',
+        metaTitle: 'Contact Us - Property Adda Help Desk',
+        metaDescription: 'Get in touch with Property Adda client support team.',
+        isPublished: true,
+      },
+    ];
+
+    for (const pageItem of cmsPagesToEnsure) {
+      await CmsPage.findOneAndUpdate(
+        { slug: pageItem.slug },
+        { $set: pageItem },
+        { upsert: true, new: true }
+      );
     }
+    console.log('✅ Real CMS pages verified & updated in MongoDB Atlas!');
 
     // 6. Seed Real Popup Banner if empty
     const bannerCount = await PopupBanner.countDocuments();
