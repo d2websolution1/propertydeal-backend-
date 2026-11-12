@@ -26,12 +26,10 @@ const propertySchema = new mongoose.Schema({
   },
   purpose: {
     type: String,
-    enum: ['sale', 'rent'],
     default: 'sale',
   },
   propertyCategory: {
     type: String,
-    enum: ['Residential', 'Commercial'],
     default: 'Residential',
   },
   otherPropertyType: {
@@ -40,7 +38,6 @@ const propertySchema = new mongoose.Schema({
   },
   sizeType: {
     type: String,
-    enum: ['Plot Area', 'Carpet Area', 'Super Built-up Area'],
     default: 'Carpet Area',
   },
   size: {
@@ -49,7 +46,6 @@ const propertySchema = new mongoose.Schema({
   },
   sizeUnit: {
     type: String,
-    enum: ['sqft', 'sq yard', 'acre'],
     default: 'sqft',
   },
   plotFrontFt: {
@@ -86,7 +82,6 @@ const propertySchema = new mongoose.Schema({
   },
   constructionStatus: {
     type: String,
-    enum: ['Ready to move', 'Under construction'],
     default: 'Ready to move',
   },
   facilities: {

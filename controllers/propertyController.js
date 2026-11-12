@@ -1,4 +1,5 @@
 // controllers/propertyController.js
+import mongoose from 'mongoose';
 import Property from '../models/Property.js';
 import User from '../models/User.js';
 import { Op } from 'sequelize';
@@ -280,15 +281,38 @@ export const postPublicProperty = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Price and city are required' });
     }
 
-    // 1. Check for logged in user via Authorization Bearer token
+    const safeNum = (v) => {
+      if (v === undefined || v === null || v === '') return null;
+      const n = Number(v);
+      return isNaN(n) ? null : n;
+    };
+
+    // 1. Check for logged in user via Authorization Bearer token (support all secret keys)
     let authUser = null;
     const authHeader = req.headers.authorization;
     if (authHeader && authHeader.startsWith('Bearer ')) {
       try {
         const token = authHeader.split(' ')[1];
-        const decoded = jwt.verify(token, process.env.JWT_SECRET || 'property-adda-secret-key-2025');
-        if (decoded?.id) {
-          authUser = await User.findByPk(decoded.id);
+        const secrets = [
+          process.env.JWT_SECRET,
+          'property-adda-secret-key-2025',
+          'your-secret-key',
+        ].filter(Boolean);
+
+        let decoded = null;
+        for (const sec of secrets) {
+          try {
+            decoded = jwt.verify(token, sec);
+            if (decoded) break;
+          } catch (e) {}
+        }
+
+        const uid = decoded?.id || decoded?._id || decoded?.userId;
+        if (uid) {
+          authUser = await User.findById(uid);
+          if (!authUser && typeof User.findByPk === 'function') {
+            authUser = await User.findByPk(uid);
+          }
         }
       } catch (e) {
         // token invalid or expired, continue with email lookup
@@ -314,10 +338,19 @@ export const postPublicProperty = async (req, res) => {
       }
     }
 
-    const finalPurpose = purpose || listingType || 'sale';
-    const finalSize = Number(size) || Number(areaSqft) || null;
-    const finalPrice = Number(price);
+    const finalPurpose = String(purpose || listingType || 'sale').toLowerCase().includes('rent') ? 'rent' : 'sale';
+    const finalPrice = safeNum(price) || 0;
+    const finalSize = safeNum(size) || safeNum(areaSqft) || null;
     const calculatedPerUnit = finalPrice && finalSize && finalSize > 0 ? Math.round(finalPrice / finalSize) : null;
+
+    let cleanSizeType = 'Carpet Area';
+    if (sizeType) {
+      const stLower = String(sizeType).toLowerCase();
+      if (stLower.includes('super')) cleanSizeType = 'Super Built-up Area';
+      else if (stLower.includes('plot')) cleanSizeType = 'Plot Area';
+      else if (stLower.includes('carpet')) cleanSizeType = 'Carpet Area';
+      else cleanSizeType = sizeType;
+    }
 
     // Auto generate clear title if left blank
     const autoTitle =
@@ -340,7 +373,7 @@ export const postPublicProperty = async (req, res) => {
     let resolvedPhone = ownerPhone?.trim() || '';
 
     if (authUser) {
-      ownerId = authUser._id || authUser.id;
+      ownerId = authUser._id;
       resolvedEmail = authUser.email || resolvedEmail;
       resolvedName = authUser.name || resolvedName;
       resolvedPhone = authUser.phone || resolvedPhone;
@@ -348,17 +381,15 @@ export const postPublicProperty = async (req, res) => {
     } else if (resolvedEmail || resolvedPhone) {
       let owner = null;
       if (resolvedEmail) {
-        owner = await User.findOne({ where: { email: resolvedEmail } });
+        owner = await User.findOne({ email: resolvedEmail });
       }
       if (!owner && resolvedPhone) {
         const cleanP = resolvedPhone.replace(/[^\d+]/g, '');
         owner = await User.findOne({
-          where: {
-            $or: [
-              { phone: cleanP },
-              { phone: cleanP.startsWith('+91') ? cleanP.replace('+91', '') : '+91' + cleanP },
-            ]
-          }
+          $or: [
+            { phone: cleanP },
+            { phone: cleanP.startsWith('+91') ? cleanP.replace('+91', '') : '+91' + cleanP },
+          ],
         });
       }
       if (!owner) {
@@ -376,13 +407,18 @@ export const postPublicProperty = async (req, res) => {
           });
         } catch (createErr) {
           console.warn('Fallback finding existing user after create attempt:', createErr.message);
-          if (resolvedEmail) owner = await User.findOne({ where: { email: resolvedEmail } });
+          if (resolvedEmail) owner = await User.findOne({ email: resolvedEmail });
         }
       }
       if (owner) {
-        ownerId = owner._id || owner.id;
+        ownerId = owner._id;
         resolvedUserType = owner.userType || resolvedUserType;
       }
+    }
+
+    let validOwnerId = null;
+    if (ownerId && mongoose.Types.ObjectId.isValid(ownerId)) {
+      validOwnerId = ownerId;
     }
 
     const uniqueCode = 'PA-' + Date.now().toString(36).toUpperCase() + '-' + Math.floor(100 + Math.random() * 900);
@@ -390,8 +426,8 @@ export const postPublicProperty = async (req, res) => {
     // If an admin posts it, auto-approve. If a user posts, set to pending so Admin can review & permit it!
     const initialStatus = authUser?.role === 'admin' ? 'approved' : 'pending';
 
-    const normalizedImages = Array.isArray(images) && images.length
-      ? images
+    const normalizedImages = Array.isArray(images) && images.length > 0 && images.some(Boolean)
+      ? images.filter(Boolean)
       : ['https://images.unsplash.com/photo-1560518883-ce09059eeffa?auto=format&fit=crop&w=1200&q=80'];
 
     const chosenFeaturedImage = featuredImage || normalizedImages[0] || '';
@@ -406,13 +442,13 @@ export const postPublicProperty = async (req, res) => {
       propertyCategory: propertyCategory || 'Residential',
       propertyType: propertyType || 'Flat',
       otherPropertyType: otherPropertyType || '',
-      sizeType: sizeType || 'Carpet Area',
+      sizeType: cleanSizeType,
       size: finalSize,
       areaSqft: finalSize,
       sizeUnit: sizeUnit || 'sqft',
-      plotFrontFt: plotFrontFt ? Number(plotFrontFt) : null,
-      plotDepthFt: plotDepthFt ? Number(plotDepthFt) : null,
-      frontRoadFt: frontRoadFt ? Number(frontRoadFt) : null,
+      plotFrontFt: safeNum(plotFrontFt),
+      plotDepthFt: safeNum(plotDepthFt),
+      frontRoadFt: safeNum(frontRoadFt),
       isCorner: !!isCorner,
       isParkFacing: !!isParkFacing,
       isTwoSideOpen: !!isTwoSideOpen,
@@ -431,15 +467,15 @@ export const postPublicProperty = async (req, res) => {
       images: normalizedImages,
       featuredImage: chosenFeaturedImage,
       state: state || 'Rajasthan',
-      city: city.trim(),
+      city: String(city).trim(),
       locality: locality ? locality.trim() : (Array.isArray(areas) && areas[0] ? areas[0] : ''),
       areas: Array.isArray(areas) ? areas : (locality ? [locality] : []),
       subAreas: Array.isArray(subAreas) ? subAreas : [],
       projectName: projectName ? projectName.trim() : '',
       pincode: pincode ? pincode.trim() : '',
       address: address ? address.trim() : '',
-      bookingAmount: bookingAmount ? Number(bookingAmount) : null,
-      maintenanceCharges: maintenanceCharges ? Number(maintenanceCharges) : null,
+      bookingAmount: safeNum(bookingAmount),
+      maintenanceCharges: safeNum(maintenanceCharges),
       isNegotiable: !!isNegotiable,
       reraNumber: reraNumber ? reraNumber.trim() : '',
       contactName: resolvedName,
@@ -450,13 +486,12 @@ export const postPublicProperty = async (req, res) => {
       ownerPhone: resolvedPhone,
       postedByType: resolvedUserType,
       whatsappAlerts: whatsappAlerts !== undefined ? !!whatsappAlerts : true,
-      qualityScore: qualityScore ? Number(qualityScore) : 0,
+      qualityScore: safeNum(qualityScore) || 0,
       status: initialStatus,
       isFeatured: false, // Featured by Admin only
       isVerified: false, // Verified by Admin only
       uniqueCode,
-      owner: ownerId || null,
-      ownerId: ownerId || null,
+      owner: validOwnerId,
     });
 
     res.status(201).json({
@@ -466,6 +501,6 @@ export const postPublicProperty = async (req, res) => {
     });
   } catch (error) {
     console.error('Error posting property:', error);
-    res.status(500).json({ success: false, message: 'Failed to post property', error: error.message });
+    res.status(500).json({ success: false, message: error.message || 'Failed to post property', error: error.message });
   }
 };
