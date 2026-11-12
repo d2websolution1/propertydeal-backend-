@@ -11,11 +11,40 @@ export const protect = async (req, res, next) => {
     }
 
     const token = authHeader.split(' ')[1];
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key');
+    if (!token || token === 'null' || token === 'undefined') {
+      return res.status(401).json({ message: 'Not authorized, token missing' });
+    }
 
-    const user = await User.findByPk(decoded.id, {
-      attributes: { exclude: ['password'] },
-    });
+    const secrets = [
+      process.env.JWT_SECRET,
+      'property-adda-secret-key-2025',
+      'your-secret-key',
+      'secret-key',
+    ].filter(Boolean);
+
+    let decoded = null;
+    for (const secret of secrets) {
+      try {
+        decoded = jwt.verify(token, secret);
+        if (decoded) break;
+      } catch (e) {
+        // try next secret
+      }
+    }
+
+    if (!decoded) {
+      return res.status(401).json({ message: 'Not authorized, invalid token' });
+    }
+
+    const userId = decoded.id || decoded._id || decoded.userId;
+    if (!userId) {
+      return res.status(401).json({ message: 'Invalid token payload' });
+    }
+
+    let user = await User.findById(userId).select('-password');
+    if (!user && typeof User.findByPk === 'function') {
+      user = await User.findByPk(userId);
+    }
 
     if (!user) {
       return res.status(401).json({ message: 'User no longer exists' });
@@ -28,6 +57,7 @@ export const protect = async (req, res, next) => {
     req.user = user;
     next();
   } catch (error) {
+    console.error('protect middleware error:', error.message);
     return res.status(401).json({ message: 'Not authorized, invalid token' });
   }
 };

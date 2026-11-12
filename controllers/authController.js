@@ -202,9 +202,11 @@ export const login = async (req, res) => {
 // GET /api/auth/me - Get current user
 export const getMe = async (req, res) => {
   try {
-    const user = await User.findByPk(req.user.id, {
-      attributes: { exclude: ['password'] }
-    });
+    const userId = req.user._id || req.user.id;
+    let user = await User.findById(userId).select('-password');
+    if (!user && typeof User.findByPk === 'function') {
+      user = await User.findByPk(userId);
+    }
     if (!user) {
       return res.status(404).json({ message: 'User not found' });
     }
