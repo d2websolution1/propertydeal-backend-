@@ -7,6 +7,8 @@ import Enquiry from '../models/Enquiry.js';
 import BlogPost from '../models/BlogPost.js';
 import CmsPage from '../models/CmsPage.js';
 import PopupBanner from '../models/PopupBanner.js';
+import NavMenu from '../models/NavMenu.js';
+import { DEFAULT_NAV_MENUS } from '../controllers/navMenuController.js';
 
 export async function seedRealDatabaseData() {
   try {
@@ -311,6 +313,14 @@ export async function seedRealDatabaseData() {
         isActive: true,
       });
       console.log('✅ Real popup banner seeded in MongoDB Atlas!');
+    }
+
+    // 7. Seed Real Navigation Menus (Header Dropdowns) if empty
+    const navMenuCount = await NavMenu.countDocuments();
+    if (navMenuCount === 0) {
+      console.log('🌱 Seeding real navigation dropdown menus to MongoDB Atlas...');
+      await NavMenu.insertMany(DEFAULT_NAV_MENUS);
+      console.log('✅ Real navigation dropdown menus seeded in MongoDB Atlas!');
     }
   } catch (err) {
     console.error('⚠️ Real data seeding error:', err.message);

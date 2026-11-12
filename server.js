@@ -52,6 +52,8 @@ import adminBulkMessageRoutes from './routes/adminBulkMessageRoutes.js';
 import adminBillingRoutes from './routes/adminBillingRoutes.js';
 import locationRoutes from './routes/locationRoutes.js';
 import adminLocationRoutes from './routes/adminLocationRoutes.js';
+import navMenuRoutes from './routes/navMenuRoutes.js';
+import adminNavMenuRoutes from './routes/adminNavMenuRoutes.js';
 import subscriptionRoutes from './routes/subscriptionRoutes.js';
 import userRoutes from './routes/userRoutes.js';
 
@@ -137,6 +139,10 @@ app.use('/api/admin/subscriptions', adminBillingRoutes);
 // ── Locations Management (Cities & Areas) ──
 app.use('/api/locations', locationRoutes);
 app.use('/api/admin/locations', adminLocationRoutes);
+
+// ── Navigation Menus (Header Dropdowns: Buyers & Tenants) ──
+app.use('/api/nav-menus', navMenuRoutes);
+app.use('/api/admin/nav-menus', adminNavMenuRoutes);
 
 // ── Subscriptions & User Features ──
 app.use('/api/subscriptions', subscriptionRoutes);
