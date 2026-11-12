@@ -175,47 +175,16 @@ export async function seedRealDatabaseData() {
       console.log('✅ Real payments seeded in MongoDB Atlas!');
     }
 
-    // 3. Seed Real Enquiries if empty
-    const enquiryCount = await Enquiry.countDocuments();
-    if (enquiryCount === 0 && existingProperties.length > 0) {
-      console.log('🌱 Seeding real customer enquiries to MongoDB Atlas...');
-      await Enquiry.create([
-        {
-          userName: 'Ankit Sharma',
-          userEmail: 'ankit.sharma91@gmail.com',
-          userPhone: '+91 9811002233',
-          property: existingProperties[0]?._id,
-          propertyTitle: existingProperties[0]?.title || '3 BHK Ultra Luxury Apartment',
-          propertyLocation: existingProperties[0]?.city || 'Greater Noida West',
-          message: 'Hi, I want to schedule a physical site visit this Sunday at 11 AM. Is the modular kitchen and covered parking included in this price?',
-          status: 'new',
-          createdAt: new Date(Date.now() - 3600000 * 4),
-        },
-        {
-          userName: 'Sneha Kapur',
-          userEmail: 'sneha.kapur@outlook.com',
-          userPhone: '+91 9877112233',
-          property: existingProperties[2]?._id || existingProperties[0]?._id,
-          propertyTitle: existingProperties[2]?.title || '2 BHK Fully Furnished Flat on Rent',
-          propertyLocation: existingProperties[2]?.city || 'Greater Noida West',
-          message: 'I am a corporate IT professional working in Sector 62 Noida. Can I move in from next month? Please share the maintenance and security deposit terms.',
-          status: 'contacted',
-          createdAt: new Date(Date.now() - 86400000 * 1),
-        },
-        {
-          userName: 'Ramesh Mittal & Sons',
-          userEmail: 'mittal.retail@yahoo.com',
-          userPhone: '+91 9822334455',
-          property: existingProperties[3]?._id || existingProperties[0]?._id,
-          propertyTitle: existingProperties[3]?.title || 'Commercial Retail Shop',
-          propertyLocation: existingProperties[3]?.city || 'Greater Noida West',
-          message: 'Interested in opening a pharmacy franchise. What is the expected monthly footfall and front road width?',
-          status: 'in_progress',
-          createdAt: new Date(Date.now() - 86400000 * 2),
-        },
-      ]);
-      console.log('✅ Real customer enquiries seeded in MongoDB Atlas!');
-    }
+    // 3. Clean up any dummy seeded enquiries so only real frontend inquiries remain
+    await Enquiry.deleteMany({
+      userEmail: {
+        $in: [
+          'ankit.sharma91@gmail.com',
+          'sneha.kapur@outlook.com',
+          'mittal.retail@yahoo.com',
+        ],
+      },
+    });
 
     // 4. Seed Real Blog Posts if empty
     const blogCount = await BlogPost.countDocuments();

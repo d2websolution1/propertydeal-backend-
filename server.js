@@ -52,6 +52,7 @@ import adminBulkMessageRoutes from './routes/adminBulkMessageRoutes.js';
 import adminBillingRoutes from './routes/adminBillingRoutes.js';
 import locationRoutes from './routes/locationRoutes.js';
 import adminLocationRoutes from './routes/adminLocationRoutes.js';
+import enquiryRoutes from './routes/enquiryRoutes.js';
 import navMenuRoutes from './routes/navMenuRoutes.js';
 import adminNavMenuRoutes from './routes/adminNavMenuRoutes.js';
 import subscriptionRoutes from './routes/subscriptionRoutes.js';
@@ -133,6 +134,7 @@ app.use('/api/admin/banners', adminBannerRoutes);
 app.use('/api/admin/bulk-messaging', adminBulkMessageRoutes);
 app.use('/api/admin/listings', adminListingRoutes);
 app.use('/api/admin/enquiries', adminListingRoutes);
+app.use('/api/enquiries', enquiryRoutes);
 app.use('/api/admin/payments', adminBillingRoutes);
 app.use('/api/admin/subscriptions', adminBillingRoutes);
 

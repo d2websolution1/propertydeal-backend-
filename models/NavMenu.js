@@ -44,3 +44,4 @@ applyMongoPlugin(navMenuSchema);
 
 const NavMenu = mongoose.models.NavMenu || mongoose.model('NavMenu', navMenuSchema);
 export default NavMenu;
+

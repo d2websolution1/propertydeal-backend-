@@ -14,3 +14,4 @@ router.put('/:key', protect, adminOnly, updateNavMenuAdmin);
 router.post('/reset', protect, adminOnly, resetNavMenusAdmin);
 
 export default router;
+

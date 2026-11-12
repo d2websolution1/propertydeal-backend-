@@ -11,3 +11,4 @@ router.get('/', getPublicNavMenus);
 router.get('/:key', getPublicNavMenuByKey);
 
 export default router;
+
