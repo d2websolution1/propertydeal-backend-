@@ -1,17 +1,24 @@
 // Backend/utils/emailService.js
 import nodemailer from 'nodemailer';
 
-// Configure transporter if credentials exist
-const createTransporter = () => {
-  const user = process.env.EMAIL_USER || process.env.SMTP_USER;
-  const pass = process.env.EMAIL_PASS || process.env.SMTP_PASS;
+/**
+ * Build nodemailer transporter with support for:
+ * 1. Hostinger SMTP (smtp.hostinger.com:465)
+ * 2. Gmail SMTP (smtp.gmail.com:465 or service: 'gmail')
+ * 3. Custom SMTP (SMTP_HOST, SMTP_PORT, etc.)
+ */
+export const createTransporter = () => {
+  const user = (process.env.EMAIL_USER || process.env.SMTP_USER || '').trim();
+  const pass = (process.env.EMAIL_PASS || process.env.SMTP_PASS || '').trim();
+  const host = (process.env.SMTP_HOST || process.env.EMAIL_HOST || '').trim();
 
   if (user && pass) {
     // If SMTP_HOST or EMAIL_HOST is provided (e.g. smtp.hostinger.com)
-    if (process.env.SMTP_HOST || process.env.EMAIL_HOST) {
-      const host = process.env.SMTP_HOST || process.env.EMAIL_HOST;
+    if (host) {
       const port = Number(process.env.SMTP_PORT || process.env.EMAIL_PORT) || 465;
-      const secure = process.env.SMTP_SECURE !== undefined ? process.env.SMTP_SECURE === 'true' : (port === 465);
+      const secure = process.env.SMTP_SECURE !== undefined
+        ? (String(process.env.SMTP_SECURE).toLowerCase() === 'true')
+        : (port === 465);
 
       return nodemailer.createTransport({
         host,
@@ -22,7 +29,7 @@ const createTransporter = () => {
       });
     }
 
-    // Default to Gmail service if user has a gmail address or EMAIL_SERVICE is specified
+    // Default to Gmail service if user has an email without explicit host
     return nodemailer.createTransport({
       service: process.env.EMAIL_SERVICE || 'gmail',
       auth: { user, pass },
@@ -31,16 +38,35 @@ const createTransporter = () => {
   }
 
   // Fallback to custom SMTP host if provided without user/pass
-  if (process.env.SMTP_HOST) {
+  if (host) {
     return nodemailer.createTransport({
-      host: process.env.SMTP_HOST,
-      port: Number(process.env.SMTP_PORT) || 587,
-      secure: process.env.SMTP_SECURE === 'true',
+      host,
+      port: Number(process.env.SMTP_PORT || process.env.EMAIL_PORT) || 587,
+      secure: String(process.env.SMTP_SECURE).toLowerCase() === 'true',
       tls: { rejectUnauthorized: false },
     });
   }
 
   return null;
+};
+
+/**
+ * Diagnostic helper to check current SMTP configuration status
+ */
+export const getEmailConfigStatus = () => {
+  const user = (process.env.EMAIL_USER || process.env.SMTP_USER || '').trim();
+  const pass = (process.env.EMAIL_PASS || process.env.SMTP_PASS || '').trim();
+  const host = (process.env.SMTP_HOST || process.env.EMAIL_HOST || '').trim();
+  const isConfigured = Boolean(user && pass);
+
+  return {
+    configured: isConfigured,
+    service: host ? `SMTP (${host})` : (user ? 'Gmail Service' : 'None'),
+    fromEmail: user ? user.replace(/(.{2})(.*)(@.*)/, '$1***$3') : 'Not Set',
+    instructions: isConfigured
+      ? 'Email service is active and ready to deliver real OTPs.'
+      : 'Set EMAIL_USER and EMAIL_PASS (or Hostinger SMTP credentials) in Render Dashboard -> Environment Variables.',
+  };
 };
 
 /**

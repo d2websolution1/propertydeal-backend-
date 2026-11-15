@@ -2,7 +2,7 @@
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import User from '../models/User.js';
-import { sendOtpEmail } from '../utils/emailService.js';
+import { sendOtpEmail, getEmailConfigStatus } from '../utils/emailService.js';
 
 const generateToken = (userId) => {
   return jwt.sign({ id: userId }, process.env.JWT_SECRET || 'property-adda-secret-key-2025', {
@@ -247,7 +247,17 @@ export const sendOtp = async (req, res) => {
     const existingUser = await User.findOne({ where: { email: cleanEmail } });
 
     // Send email using nodemailer service
-    await sendOtpEmail(cleanEmail, otp, name || (existingUser ? existingUser.name : 'Valued Client'));
+    const emailResult = await sendOtpEmail(cleanEmail, otp, name || (existingUser ? existingUser.name : 'Valued Client'));
+
+    if (!emailResult.sent) {
+      console.error(`❌ OTP Email dispatch failed to ${cleanEmail}:`, emailResult.error || emailResult.message);
+      return res.status(503).json({
+        success: false,
+        message: emailResult.mode === 'unconfigured'
+          ? 'Email SMTP is not configured on the server. Please add EMAIL_USER and EMAIL_PASS (or Hostinger SMTP credentials) in Render Dashboard Environment Variables.'
+          : `Failed to deliver verification email: ${emailResult.error || 'SMTP delivery failed'}. Please check SMTP configuration on server.`,
+      });
+    }
 
     res.json({
       success: true,
@@ -258,6 +268,15 @@ export const sendOtp = async (req, res) => {
     console.error('❌ Error sending OTP:', error);
     res.status(500).json({ message: 'Failed to send verification code', error: error.message });
   }
+};
+
+// GET /api/auth/email-status - Diagnostic check for SMTP configuration
+export const checkEmailStatus = async (req, res) => {
+  const status = getEmailConfigStatus();
+  res.json({
+    success: true,
+    ...status,
+  });
 };
 
 // POST /api/auth/verify-otp - Verify OTP and login or create client account

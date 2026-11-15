@@ -11,11 +11,13 @@ import {
   updateProfile,
   mobileRegister,
   mobileLogin,
+  checkEmailStatus,
 } from '../controllers/authController.js';
 import { protect } from '../middleware/authMiddleware.js';
 
 const router = express.Router();
 
+router.get('/email-status', checkEmailStatus);
 router.post('/register', register);
 router.post('/login', login);
 router.post('/mobile-register', mobileRegister);
