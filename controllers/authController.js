@@ -251,10 +251,8 @@ export const sendOtp = async (req, res) => {
 
     res.json({
       success: true,
-      message: `Verification code sent to ${cleanEmail}`,
+      message: `A 6-digit verification code has been sent to ${cleanEmail}. Please check your Gmail inbox (and Spam folder) to enter the code.`,
       isExistingUser: !!existingUser,
-      // Provide preview in development/test environment for easy testing
-      previewOtp: otp,
     });
   } catch (error) {
     console.error('❌ Error sending OTP:', error);
