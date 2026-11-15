@@ -222,7 +222,7 @@ const otpStore = new Map();
 // POST /api/auth/send-otp - Send OTP to Gmail / Email for Client Signup or Login
 export const sendOtp = async (req, res) => {
   try {
-    const { email, name, phone, type = 'auth' } = req.body;
+    const { email, name, phone, userType, type = 'auth' } = req.body;
 
     if (!email) {
       return res.status(400).json({ message: 'Email address is required' });
@@ -239,6 +239,7 @@ export const sendOtp = async (req, res) => {
       expiresAt,
       name: name?.trim() || 'Valued Client',
       phone: phone?.trim() || null,
+      userType: userType || 'Owner',
       type,
     });
 
@@ -264,7 +265,7 @@ export const sendOtp = async (req, res) => {
 // POST /api/auth/verify-otp - Verify OTP and login or create client account
 export const verifyOtp = async (req, res) => {
   try {
-    const { email, otp, name, phone, password } = req.body;
+    const { email, otp, name, phone, userType, password } = req.body;
 
     if (!email || !otp) {
       return res.status(400).json({ message: 'Email and OTP are required' });
@@ -294,18 +295,28 @@ export const verifyOtp = async (req, res) => {
       const clientName = name?.trim() || storedRecord.name || cleanEmail.split('@')[0];
       const clientPassword = password || `pd_${Math.random().toString(36).substring(2, 10)}`;
       const hashedPassword = await bcrypt.hash(clientPassword, 10);
+      const chosenUserType = userType || storedRecord.userType || 'Owner';
 
       user = await User.create({
         name: clientName,
         email: cleanEmail,
         password: hashedPassword,
         phone: phone?.trim() || storedRecord.phone || null,
+        userType: chosenUserType,
         role: 'user', // Client role
       });
       console.log(`🎉 New client account registered via OTP: ${cleanEmail}`);
     } else {
       if (user.isBlocked) {
         return res.status(403).json({ message: 'This account is blocked. Please contact support.' });
+      }
+      if (phone && !user.phone) {
+        user.phone = phone.trim();
+        await user.save();
+      }
+      if (userType && user.userType !== userType) {
+        user.userType = userType;
+        await user.save();
       }
       console.log(`✅ Existing client authenticated via OTP: ${cleanEmail}`);
     }
