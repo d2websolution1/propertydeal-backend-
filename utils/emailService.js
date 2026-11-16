@@ -1,5 +1,15 @@
 // Backend/utils/emailService.js
 import nodemailer from 'nodemailer';
+import { Resend } from 'resend';
+
+// Initialize Resend instance if API key is present
+const getResendClient = () => {
+  const apiKey = (process.env.RESEND_API_KEY || '').trim();
+  if (apiKey) {
+    return new Resend(apiKey);
+  }
+  return null;
+};
 
 /**
  * Build nodemailer transporter with support for:
@@ -51,9 +61,21 @@ export const createTransporter = () => {
 };
 
 /**
- * Diagnostic helper to check current SMTP configuration status
+ * Diagnostic helper to check current Email / SMTP configuration status
  */
 export const getEmailConfigStatus = () => {
+  const resendKey = (process.env.RESEND_API_KEY || '').trim();
+  if (resendKey) {
+    const maskedKey = resendKey.substring(0, 6) + '...' + resendKey.substring(Math.max(0, resendKey.length - 4));
+    return {
+      configured: true,
+      service: 'Resend API',
+      apiKey: maskedKey,
+      fromEmail: process.env.RESEND_FROM || process.env.EMAIL_FROM || 'onboarding@resend.dev',
+      instructions: 'Resend API is active. Ready to deliver live OTP verification emails.',
+    };
+  }
+
   const user = (process.env.EMAIL_USER || process.env.SMTP_USER || '').trim();
   const pass = (process.env.EMAIL_PASS || process.env.SMTP_PASS || '').trim();
   const host = (process.env.SMTP_HOST || process.env.EMAIL_HOST || '').trim();
@@ -65,7 +87,7 @@ export const getEmailConfigStatus = () => {
     fromEmail: user ? user.replace(/(.{2})(.*)(@.*)/, '$1***$3') : 'Not Set',
     instructions: isConfigured
       ? 'Email service is active and ready to deliver real OTPs.'
-      : 'Set EMAIL_USER and EMAIL_PASS (or Hostinger SMTP credentials) in Render Dashboard -> Environment Variables.',
+      : 'Set RESEND_API_KEY (or EMAIL_USER & EMAIL_PASS) in Render Dashboard -> Environment Variables.',
   };
 };
 
@@ -79,18 +101,6 @@ export const sendOtpEmail = async (email, otp, name = 'Valued Client') => {
   console.log(`Verification Code (OTP): 👉 ${otp} 👈`);
   console.log(`Time: ${new Date().toLocaleTimeString()}`);
   console.log(`==================================================\n`);
-
-  const transporter = createTransporter();
-
-  if (!transporter) {
-    console.warn(`⚠️ [SMTP Notice]: EMAIL_USER / EMAIL_PASS or SMTP credentials not set in environment.`);
-    console.warn(`   Configure EMAIL_USER and EMAIL_PASS (or Hostinger SMTP credentials) in Render environment variables to send live emails to inboxes.`);
-    return {
-      sent: false,
-      mode: 'unconfigured',
-      message: 'SMTP credentials not configured in environment',
-    };
-  }
 
   const htmlContent = `
     <!DOCTYPE html>
@@ -130,6 +140,48 @@ export const sendOtpEmail = async (email, otp, name = 'Valued Client') => {
     </body>
     </html>
   `;
+
+  // 1. Check if Resend is configured (Primary)
+  const resend = getResendClient();
+  if (resend) {
+    try {
+      const fromEmail = process.env.RESEND_FROM || process.env.EMAIL_FROM || 'Property Adda <onboarding@resend.dev>';
+      const { data, error } = await resend.emails.send({
+        from: fromEmail,
+        to: [email],
+        subject: `${otp} is your Property Adda verification code`,
+        html: htmlContent,
+      });
+
+      if (error) {
+        console.error('❌ Resend API Error:', error);
+        return {
+          sent: false,
+          mode: 'resend_error',
+          error: error.message || JSON.stringify(error),
+        };
+      }
+
+      console.log(`✅ Real OTP email successfully delivered via Resend to: ${email} (ID: ${data?.id})`);
+      return { sent: true, mode: 'resend', messageId: data?.id };
+    } catch (err) {
+      console.error('❌ Resend Exception:', err.message);
+      return { sent: false, mode: 'resend_error', error: err.message };
+    }
+  }
+
+  // 2. Fallback to Nodemailer SMTP
+  const transporter = createTransporter();
+
+  if (!transporter) {
+    console.warn(`⚠️ [Email Notice]: RESEND_API_KEY or SMTP credentials not set in environment.`);
+    console.warn(`   Configure RESEND_API_KEY in Render environment variables to send live emails to inboxes.`);
+    return {
+      sent: false,
+      mode: 'unconfigured',
+      message: 'Email service credentials not configured in environment',
+    };
+  }
 
   try {
     const fromAddress = process.env.EMAIL_FROM || process.env.EMAIL_USER || process.env.SMTP_USER || 'noreply@property-adda.com';
