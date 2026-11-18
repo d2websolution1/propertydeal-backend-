@@ -175,16 +175,20 @@ export async function seedRealDatabaseData() {
       console.log('✅ Real payments seeded in MongoDB Atlas!');
     }
 
-    // 3. Clean up any dummy seeded enquiries so only real frontend inquiries remain
-    await Enquiry.deleteMany({
-      userEmail: {
-        $in: [
-          'ankit.sharma91@gmail.com',
-          'sneha.kapur@outlook.com',
-          'mittal.retail@yahoo.com',
-        ],
-      },
-    });
+    // 3. Ensure all enquiries are linked to their property owner
+    const unlinkedEnquiries = await Enquiry.find({ $or: [{ owner: null }, { owner: { $exists: false } }] });
+    for (const enq of unlinkedEnquiries) {
+      if (enq.property) {
+        const prop = await Property.findById(enq.property);
+        if (prop && prop.owner) {
+          enq.owner = prop.owner;
+          enq.ownerName = prop.ownerName || prop.contactName || '';
+          enq.ownerEmail = prop.ownerEmail || prop.contactEmail || '';
+          enq.ownerPhone = prop.ownerPhone || prop.contactPhone || '';
+          await enq.save();
+        }
+      }
+    }
 
     // 4. Seed Real Blog Posts if empty
     const blogCount = await BlogPost.countDocuments();

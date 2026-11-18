@@ -235,6 +235,72 @@ export const deleteUserProperty = async (req, res) => {
   }
 };
 
+// PUT /api/properties/user/:id (or /api/properties/:id)
+export const updateUserProperty = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const userId = req.user.id || req.user._id;
+    const userEmail = req.user.email ? req.user.email.toLowerCase().trim() : '';
+
+    let property = null;
+    if (mongoose.Types.ObjectId.isValid(id)) {
+      property = await Property.findById(id);
+    }
+    if (!property) {
+      property = await Property.findOne({
+        $or: [{ uniqueCode: id }, { _id: mongoose.Types.ObjectId.isValid(id) ? id : null }],
+      });
+    }
+
+    if (!property) {
+      return res.status(404).json({ success: false, message: 'Property not found' });
+    }
+
+    const isOwner =
+      (property.owner && property.owner.toString() === userId.toString()) ||
+      (property.ownerEmail && property.ownerEmail.toLowerCase().trim() === userEmail) ||
+      (property.contactEmail && property.contactEmail.toLowerCase().trim() === userEmail);
+
+    if (!isOwner && req.user.role !== 'admin') {
+      return res.status(403).json({ success: false, message: 'Not authorized to edit this property' });
+    }
+
+    const safeNum = (v) => {
+      if (v === undefined || v === null || v === '') return undefined;
+      const n = Number(v);
+      return isNaN(n) ? undefined : n;
+    };
+
+    const updates = { ...req.body };
+    if (updates.price !== undefined) updates.price = safeNum(updates.price);
+    if (updates.size !== undefined || updates.areaSqft !== undefined) {
+      const sz = safeNum(updates.size) || safeNum(updates.areaSqft);
+      if (sz !== undefined) {
+        updates.size = sz;
+        updates.areaSqft = sz;
+      }
+    }
+    if (updates.price && updates.size && updates.size > 0) {
+      updates.pricePerUnit = Math.round(updates.price / updates.size);
+    }
+
+    if (req.user.role !== 'admin') {
+      delete updates.owner;
+      delete updates.ownerId;
+    }
+
+    const updated = await Property.findByIdAndUpdate(property._id, updates, { new: true });
+    res.json({
+      success: true,
+      message: 'Property updated successfully',
+      property: updated,
+    });
+  } catch (error) {
+    console.error('Error updating property:', error);
+    res.status(500).json({ success: false, message: 'Failed to update property', error: error.message });
+  }
+};
+
 // GET /api/properties/:id
 export const getPropertyById = async (req, res) => {
   try {

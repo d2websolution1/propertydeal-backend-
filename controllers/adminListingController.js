@@ -155,6 +155,7 @@ export const createEnquiry = async (req, res) => {
     let ownerEmail = '';
     let ownerPhone = '';
     let postedByType = 'Owner';
+    let finalPropId = null;
 
     const pId = propertyId || property;
 
@@ -170,24 +171,42 @@ export const createEnquiry = async (req, res) => {
       }
 
       if (propDoc) {
+        finalPropId = propDoc._id;
         resolvedTitle = resolvedTitle || propDoc.title;
         resolvedLocation = resolvedLocation || propDoc.locality || propDoc.city;
-        ownerId = propDoc.owner?._id || propDoc.owner || propDoc.ownerId || null;
+        
+        if (propDoc.owner) {
+          ownerId = propDoc.owner._id || propDoc.owner;
+        }
+        if (!ownerId && propDoc.ownerId) {
+          ownerId = propDoc.ownerId;
+        }
+
         ownerName = propDoc.owner?.name || propDoc.ownerName || propDoc.contactName || '';
         ownerEmail = propDoc.owner?.email || propDoc.ownerEmail || propDoc.contactEmail || '';
         ownerPhone = propDoc.owner?.phone || propDoc.ownerPhone || propDoc.contactPhone || '';
         postedByType = propDoc.owner?.userType || propDoc.postedByType || 'Owner';
+
+        if (!ownerId && (ownerEmail || propDoc.ownerEmail || propDoc.contactEmail)) {
+          const emailLookup = (ownerEmail || propDoc.ownerEmail || propDoc.contactEmail).toLowerCase().trim();
+          const foundUser = await User.findOne({ email: new RegExp(`^${emailLookup}$`, 'i') });
+          if (foundUser) {
+            ownerId = foundUser._id;
+            ownerName = ownerName || foundUser.name;
+            ownerPhone = ownerPhone || foundUser.phone;
+          }
+        }
       }
     }
 
     const enquiry = await Enquiry.create({
       user: req.user?._id || req.user?.id || null,
-      property: pId && mongoose.Types.ObjectId.isValid(pId) ? pId : null,
-      owner: ownerId || null,
-      ownerName,
-      ownerEmail,
-      ownerPhone,
-      postedByType,
+      property: finalPropId || (pId && mongoose.Types.ObjectId.isValid(pId) ? pId : null),
+      owner: (ownerId && mongoose.Types.ObjectId.isValid(ownerId)) ? ownerId : null,
+      ownerName: ownerName || 'Property Owner',
+      ownerEmail: ownerEmail || '',
+      ownerPhone: ownerPhone || '',
+      postedByType: postedByType || 'Owner',
       propertyTitle: resolvedTitle || 'General Property Inquiry',
       propertyLocation: resolvedLocation || 'India',
       userName: finalName,
@@ -213,31 +232,43 @@ export const createEnquiry = async (req, res) => {
 // GET /api/enquiries/my-enquiries - Leads for logged-in Dealer / Owner
 export const getMyEnquiries = async (req, res) => {
   try {
-    const userId = req.user._id || req.user.id;
+    const rawUserId = req.user._id || req.user.id;
+    const userIdStr = String(rawUserId);
     const userEmail = req.user.email ? req.user.email.toLowerCase().trim() : '';
-    const userPhone = req.user.phone ? req.user.phone.trim() : '';
+    const rawPhone = req.user.phone ? req.user.phone.trim() : '';
+    const cleanPhone = rawPhone.replace(/\D/g, '');
 
     // Find properties owned by this user
-    const userProps = await Property.find({
-      $or: [
-        { owner: userId },
-        { ownerId: userId },
-        ...(userEmail ? [{ ownerEmail: userEmail }, { contactEmail: userEmail }] : []),
-        ...(userPhone ? [{ ownerPhone: userPhone }, { contactPhone: userPhone }] : []),
-      ]
-    }).select('_id');
+    const propOr = [
+      { owner: rawUserId },
+      ...(mongoose.Types.ObjectId.isValid(userIdStr) ? [{ owner: new mongoose.Types.ObjectId(userIdStr) }] : []),
+      { owner: userIdStr },
+      ...(userEmail ? [
+        { ownerEmail: new RegExp(`^${userEmail}$`, 'i') },
+        { contactEmail: new RegExp(`^${userEmail}$`, 'i') },
+      ] : []),
+      ...(cleanPhone ? [
+        { ownerPhone: new RegExp(cleanPhone) },
+        { contactPhone: new RegExp(cleanPhone) },
+      ] : []),
+    ];
 
+    const userProps = await Property.find({ $or: propOr });
     const propIds = userProps.map((p) => p._id);
+    const propTitles = userProps.map((p) => p.title).filter(Boolean);
 
     // Find enquiries where owner is this user OR property belongs to this user OR owner contact matches
-    const enquiries = await Enquiry.find({
-      $or: [
-        { owner: userId },
-        ...(propIds.length > 0 ? [{ property: { $in: propIds } }] : []),
-        ...(userEmail ? [{ ownerEmail: userEmail }] : []),
-        ...(userPhone ? [{ ownerPhone: userPhone }] : []),
-      ]
-    })
+    const enqOr = [
+      { owner: rawUserId },
+      ...(mongoose.Types.ObjectId.isValid(userIdStr) ? [{ owner: new mongoose.Types.ObjectId(userIdStr) }] : []),
+      { owner: userIdStr },
+      ...(propIds.length > 0 ? [{ property: { $in: propIds } }] : []),
+      ...(propTitles.length > 0 ? [{ propertyTitle: { $in: propTitles } }] : []),
+      ...(userEmail ? [{ ownerEmail: new RegExp(`^${userEmail}$`, 'i') }] : []),
+      ...(cleanPhone ? [{ ownerPhone: new RegExp(cleanPhone) }] : []),
+    ];
+
+    const enquiries = await Enquiry.find({ $or: enqOr })
       .sort({ createdAt: -1 })
       .populate('property', 'title locality city price areaSqft images uniqueCode listingType')
       .populate('user', 'name email phone');
