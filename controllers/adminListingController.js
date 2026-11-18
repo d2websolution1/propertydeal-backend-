@@ -113,7 +113,8 @@ export const getEnquiries = async (req, res) => {
     const enquiries = await Enquiry.find({})
       .sort({ createdAt: -1 })
       .populate('user', 'name email phone')
-      .populate('property', 'title locality city price images');
+      .populate('owner', 'name email phone userType role')
+      .populate('property', 'title locality city price images uniqueCode');
     res.json(enquiries);
   } catch (error) {
     console.error('Error fetching enquiries:', error);
@@ -149,19 +150,44 @@ export const createEnquiry = async (req, res) => {
 
     let resolvedTitle = propertyTitle || '';
     let resolvedLocation = propertyLocation || '';
+    let ownerId = null;
+    let ownerName = '';
+    let ownerEmail = '';
+    let ownerPhone = '';
+    let postedByType = 'Owner';
+
     const pId = propertyId || property;
 
-    if (pId && mongoose.Types.ObjectId.isValid(pId)) {
-      const propDoc = await Property.findById(pId);
+    if (pId) {
+      let propDoc = null;
+      if (mongoose.Types.ObjectId.isValid(pId)) {
+        propDoc = await Property.findById(pId).populate('owner');
+      }
+      if (!propDoc) {
+        propDoc = await Property.findOne({
+          $or: [{ uniqueCode: pId }, { _id: mongoose.Types.ObjectId.isValid(pId) ? pId : null }]
+        }).populate('owner');
+      }
+
       if (propDoc) {
         resolvedTitle = resolvedTitle || propDoc.title;
         resolvedLocation = resolvedLocation || propDoc.locality || propDoc.city;
+        ownerId = propDoc.owner?._id || propDoc.owner || propDoc.ownerId || null;
+        ownerName = propDoc.owner?.name || propDoc.ownerName || propDoc.contactName || '';
+        ownerEmail = propDoc.owner?.email || propDoc.ownerEmail || propDoc.contactEmail || '';
+        ownerPhone = propDoc.owner?.phone || propDoc.ownerPhone || propDoc.contactPhone || '';
+        postedByType = propDoc.owner?.userType || propDoc.postedByType || 'Owner';
       }
     }
 
     const enquiry = await Enquiry.create({
       user: req.user?._id || req.user?.id || null,
       property: pId && mongoose.Types.ObjectId.isValid(pId) ? pId : null,
+      owner: ownerId || null,
+      ownerName,
+      ownerEmail,
+      ownerPhone,
+      postedByType,
       propertyTitle: resolvedTitle || 'General Property Inquiry',
       propertyLocation: resolvedLocation || 'India',
       userName: finalName,
@@ -171,6 +197,8 @@ export const createEnquiry = async (req, res) => {
       status: 'new',
     });
 
+    console.log(`📥 New Enquiry received: "${finalName}" for "${resolvedTitle}" -> Owner/Dealer: "${ownerName || 'Property Adda Admin'}"`);
+
     res.status(201).json({
       success: true,
       message: 'Enquiry submitted successfully',
@@ -179,6 +207,49 @@ export const createEnquiry = async (req, res) => {
   } catch (error) {
     console.error('Error in createEnquiry:', error);
     res.status(500).json({ message: 'Failed to submit enquiry', error: error.message });
+  }
+};
+
+// GET /api/enquiries/my-enquiries - Leads for logged-in Dealer / Owner
+export const getMyEnquiries = async (req, res) => {
+  try {
+    const userId = req.user._id || req.user.id;
+    const userEmail = req.user.email ? req.user.email.toLowerCase().trim() : '';
+    const userPhone = req.user.phone ? req.user.phone.trim() : '';
+
+    // Find properties owned by this user
+    const userProps = await Property.find({
+      $or: [
+        { owner: userId },
+        { ownerId: userId },
+        ...(userEmail ? [{ ownerEmail: userEmail }, { contactEmail: userEmail }] : []),
+        ...(userPhone ? [{ ownerPhone: userPhone }, { contactPhone: userPhone }] : []),
+      ]
+    }).select('_id');
+
+    const propIds = userProps.map((p) => p._id);
+
+    // Find enquiries where owner is this user OR property belongs to this user OR owner contact matches
+    const enquiries = await Enquiry.find({
+      $or: [
+        { owner: userId },
+        ...(propIds.length > 0 ? [{ property: { $in: propIds } }] : []),
+        ...(userEmail ? [{ ownerEmail: userEmail }] : []),
+        ...(userPhone ? [{ ownerPhone: userPhone }] : []),
+      ]
+    })
+      .sort({ createdAt: -1 })
+      .populate('property', 'title locality city price areaSqft images uniqueCode listingType')
+      .populate('user', 'name email phone');
+
+    res.json({
+      success: true,
+      count: enquiries.length,
+      enquiries,
+    });
+  } catch (error) {
+    console.error('Error fetching my enquiries:', error);
+    res.status(500).json({ success: false, message: 'Failed to load inquiries', error: error.message });
   }
 };
 

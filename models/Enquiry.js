@@ -13,6 +13,28 @@ const enquirySchema = new mongoose.Schema({
     ref: 'Property',
     required: false,
   },
+  owner: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: false,
+  },
+  ownerName: {
+    type: String,
+    default: '',
+  },
+  ownerEmail: {
+    type: String,
+    default: '',
+  },
+  ownerPhone: {
+    type: String,
+    default: '',
+  },
+  postedByType: {
+    type: String,
+    enum: ['Owner', 'Dealer / Agent', 'Builder', 'Admin', 'User'],
+    default: 'Owner',
+  },
   message: {
     type: String,
     required: true,
@@ -57,6 +79,12 @@ enquirySchema.virtual('propertyId').get(function () {
   return this.property ? this.property.toString() : null;
 }).set(function (val) {
   this.property = val;
+});
+
+enquirySchema.virtual('ownerId').get(function () {
+  return this.owner ? this.owner.toString() : null;
+}).set(function (val) {
+  this.owner = val;
 });
 
 applyMongoPlugin(enquirySchema);

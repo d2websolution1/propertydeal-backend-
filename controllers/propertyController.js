@@ -14,6 +14,7 @@ export const getPublicProperties = async (req, res) => {
       propertyCategory,
       propertyType,
       city,
+      location,
       area,
       locality,
       bhk,
@@ -22,6 +23,8 @@ export const getPublicProperties = async (req, res) => {
       maxPrice,
       furnishing,
       constructionStatus,
+      amenities,
+      facilities,
       q,
       isFeatured,
       isVerified,
@@ -49,8 +52,16 @@ export const getPublicProperties = async (req, res) => {
       where.propertyType = { [Op.like]: `%${propertyType}%` };
     }
 
-    if (city && city !== 'all' && city !== 'All India') {
-      where.city = { [Op.like]: `%${city}%` };
+    // Location / City / Locality matching
+    const locQuery = location || city;
+    if (locQuery && locQuery !== 'all' && locQuery !== 'All India') {
+      where[Op.or] = [
+        ...(where[Op.or] || []),
+        { city: { [Op.like]: `%${locQuery}%` } },
+        { locality: { [Op.like]: `%${locQuery}%` } },
+        { address: { [Op.like]: `%${locQuery}%` } },
+        { projectName: { [Op.like]: `%${locQuery}%` } },
+      ];
     }
 
     const areaQuery = area || locality;
@@ -78,6 +89,22 @@ export const getPublicProperties = async (req, res) => {
 
     if (constructionStatus && constructionStatus !== 'all') {
       where.constructionStatus = constructionStatus;
+    }
+
+    // Amenities / Facilities Filter
+    const amenityParam = amenities || facilities;
+    if (amenityParam && amenityParam !== 'all') {
+      const amenityList = (Array.isArray(amenityParam) ? amenityParam : String(amenityParam).split(','))
+        .map((s) => s.trim())
+        .filter(Boolean);
+
+      if (amenityList.length > 0) {
+        where[Op.or] = [
+          ...(where[Op.or] || []),
+          ...amenityList.map((a) => ({ amenities: { [Op.like]: `%${a}%` } })),
+          ...amenityList.map((a) => ({ facilities: { [Op.like]: `%${a}%` } })),
+        ];
+      }
     }
 
     if (isFeatured === 'true') {
@@ -121,10 +148,22 @@ export const getPublicProperties = async (req, res) => {
       ],
     });
 
+    const enrichedProperties = properties.map((p) => {
+      const obj = typeof p.toJSON === 'function' ? p.toJSON() : (p.toObject ? p.toObject() : { ...p });
+      const sizeVal = Number(obj.areaSqft || obj.size);
+      const priceVal = Number(obj.price);
+      if (priceVal && sizeVal && sizeVal > 0) {
+        obj.pricePerSqft = Math.round(priceVal / sizeVal);
+      } else {
+        obj.pricePerSqft = null;
+      }
+      return obj;
+    });
+
     res.json({
       success: true,
       count,
-      properties,
+      properties: enrichedProperties,
     });
   } catch (error) {
     console.error('Error fetching public properties:', error);
@@ -200,21 +239,47 @@ export const deleteUserProperty = async (req, res) => {
 export const getPropertyById = async (req, res) => {
   try {
     const { id } = req.params;
-    const property = await Property.findByPk(id, {
-      include: [
-        {
-          model: User,
-          as: 'owner',
-          attributes: ['id', 'name', 'email', 'phone', 'role', 'userType', 'companyName', 'reraNumber'],
-        },
-      ],
-    });
+    let property = null;
+
+    if (id && mongoose.Types.ObjectId.isValid(id)) {
+      property = await Property.findById(id).populate('owner', 'id name email phone role userType companyName reraNumber isVerifiedAgent');
+    }
+
+    if (!property && id) {
+      property = await Property.findOne({
+        $or: [
+          { uniqueCode: id },
+          ...(mongoose.Types.ObjectId.isValid(id) ? [{ _id: id }] : [])
+        ]
+      }).populate('owner', 'id name email phone role userType companyName reraNumber isVerifiedAgent');
+    }
+
+    if (!property && typeof Property.findByPk === 'function') {
+      property = await Property.findByPk(id, {
+        include: [
+          {
+            model: User,
+            as: 'owner',
+            attributes: ['id', 'name', 'email', 'phone', 'role', 'userType', 'companyName', 'reraNumber', 'isVerifiedAgent'],
+          },
+        ],
+      });
+    }
 
     if (!property) {
       return res.status(404).json({ success: false, message: 'Property not found' });
     }
 
-    res.json({ success: true, property });
+    const obj = typeof property.toJSON === 'function' ? property.toJSON() : (property.toObject ? property.toObject() : { ...property });
+    const sizeVal = Number(obj.areaSqft || obj.size);
+    const priceVal = Number(obj.price);
+    if (priceVal && sizeVal && sizeVal > 0) {
+      obj.pricePerSqft = Math.round(priceVal / sizeVal);
+    } else {
+      obj.pricePerSqft = null;
+    }
+
+    res.json({ success: true, property: obj });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Failed to fetch property', error: error.message });
   }
