@@ -53,14 +53,15 @@ export const getPublicProperties = async (req, res) => {
     }
 
     // Location / City / Locality matching
-    const locQuery = location || city;
-    if (locQuery && locQuery !== 'all' && locQuery !== 'All India') {
+    if (city && city !== 'all' && city !== 'All India') {
+      where.city = { [Op.like]: `%${city.trim()}%` };
+    } else if (location && location !== 'all' && location !== 'All India') {
       where[Op.or] = [
         ...(where[Op.or] || []),
-        { city: { [Op.like]: `%${locQuery}%` } },
-        { locality: { [Op.like]: `%${locQuery}%` } },
-        { address: { [Op.like]: `%${locQuery}%` } },
-        { projectName: { [Op.like]: `%${locQuery}%` } },
+        { city: { [Op.like]: `%${location}%` } },
+        { locality: { [Op.like]: `%${location}%` } },
+        { address: { [Op.like]: `%${location}%` } },
+        { projectName: { [Op.like]: `%${location}%` } },
       ];
     }
 
@@ -68,10 +69,26 @@ export const getPublicProperties = async (req, res) => {
     if (areaQuery && areaQuery !== 'all') {
       where[Op.or] = [
         ...(where[Op.or] || []),
-        { locality: { [Op.like]: `%${areaQuery}%` } },
-        { projectName: { [Op.like]: `%${areaQuery}%` } },
-        { areas: { [Op.like]: `%${areaQuery}%` } },
+        { locality: { [Op.like]: `%${areaQuery.trim()}%` } },
+        { projectName: { [Op.like]: `%${areaQuery.trim()}%` } },
+        { areas: { [Op.like]: `%${areaQuery.trim()}%` } },
       ];
+    }
+
+    // Sub Area / Township matching (Multiselect support)
+    const subAreaQuery = req.query.subArea || req.query.subAreas || req.query.township;
+    if (subAreaQuery && subAreaQuery !== 'all') {
+      const subAreaList = (Array.isArray(subAreaQuery) ? subAreaQuery : String(subAreaQuery).split(','))
+        .map((s) => s.trim())
+        .filter(Boolean);
+      if (subAreaList.length > 0) {
+        where[Op.or] = [
+          ...(where[Op.or] || []),
+          ...subAreaList.map((s) => ({ subAreas: { [Op.like]: `%${s}%` } })),
+          ...subAreaList.map((s) => ({ projectName: { [Op.like]: `%${s}%` } })),
+          ...subAreaList.map((s) => ({ address: { [Op.like]: `%${s}%` } })),
+        ];
+      }
     }
 
     const bedroomQuery = bedrooms || bhk;
