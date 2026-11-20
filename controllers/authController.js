@@ -243,6 +243,7 @@ export const sendOtp = async (req, res) => {
       name: name?.trim() || 'Valued Client',
       phone: phone?.trim() || null,
       userType: userType || 'Owner',
+      password: req.body.password || null,
       type,
     });
 
@@ -339,6 +340,9 @@ export const verifyOtp = async (req, res) => {
       }
       if (phone && !user.phone) {
         user.phone = phone.trim();
+      }
+      if (password) {
+        user.password = await bcrypt.hash(password, 10);
       }
       if (userType && user.userType !== userType) {
         user.userType = userType;
@@ -536,6 +540,15 @@ export const updateProfile = async (req, res) => {
       about: about !== undefined ? about.trim() : user.about,
       isProfileCompleted: true,
     };
+
+    if (req.body.activePlan) {
+      updateFields.activePlan = req.body.activePlan;
+      const vDays = Number(req.body.validityDays || 30);
+      updateFields.planExpiresAt = new Date(Date.now() + vDays * 24 * 60 * 60 * 1000);
+      if (req.body.listingLimit !== undefined) {
+        updateFields.listingLimit = Number(req.body.listingLimit);
+      }
+    }
 
     await user.update(updateFields);
 
