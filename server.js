@@ -57,6 +57,7 @@ import navMenuRoutes from './routes/navMenuRoutes.js';
 import adminNavMenuRoutes from './routes/adminNavMenuRoutes.js';
 import subscriptionRoutes from './routes/subscriptionRoutes.js';
 import userRoutes from './routes/userRoutes.js';
+import authorityRoutes from './routes/authorityRoutes.js';
 
 dotenv.config();
 
@@ -149,6 +150,7 @@ app.use('/api/admin/nav-menus', adminNavMenuRoutes);
 // ── Subscriptions & User Features ──
 app.use('/api/subscriptions', subscriptionRoutes);
 app.use('/api/users', userRoutes);
+app.use('/api/authorities', authorityRoutes);
 
 const PORT = process.env.PORT || 5000;
 

@@ -71,6 +71,9 @@ export const register = async (req, res) => {
     const hashedPassword = await bcrypt.hash(password, 10);
 
     const resolvedUserType = ['Owner', 'Dealer / Agent', 'Builder'].includes(userType) ? userType : 'Owner';
+    const resolvedPlan = req.body.activePlan || (resolvedUserType === 'Dealer / Agent' ? 'Pro Agent Plan' : 'Free Starter (30 Days)');
+    const vDays = Number(req.body.validityDays || (resolvedUserType === 'Dealer / Agent' ? 90 : 30));
+    const planExpiresAt = new Date(Date.now() + vDays * 24 * 60 * 60 * 1000);
 
     const user = await User.create({
       name: name.trim(),
@@ -81,10 +84,10 @@ export const register = async (req, res) => {
       phone: cleanPhone,
       userType: resolvedUserType,
       role: role === 'vendor' ? 'vendor' : (role === 'admin' ? 'admin' : 'user'),
-      activePlan: 'Free Starter (फ्री में 2 लिस्टिंग)',
-      listingLimit: 2,
-      featuredLimit: 0,
-      planExpiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+      activePlan: resolvedPlan,
+      listingLimit: resolvedUserType === 'Dealer / Agent' ? 50 : 2,
+      featuredLimit: resolvedUserType === 'Dealer / Agent' ? 5 : 0,
+      planExpiresAt,
     });
 
     const token = generateToken(user.id);
@@ -282,7 +285,7 @@ export const checkEmailStatus = async (req, res) => {
 // POST /api/auth/verify-otp - Verify OTP and login or create client account
 export const verifyOtp = async (req, res) => {
   try {
-    const { email, otp, name, phone, userType, password } = req.body;
+    const { email, otp, name, phone, userType, password, activePlan, validityDays } = req.body;
 
     if (!email || !otp) {
       return res.status(400).json({ message: 'Email and OTP are required' });
@@ -313,6 +316,9 @@ export const verifyOtp = async (req, res) => {
       const clientPassword = password || `pd_${Math.random().toString(36).substring(2, 10)}`;
       const hashedPassword = await bcrypt.hash(clientPassword, 10);
       const chosenUserType = userType || storedRecord.userType || 'Owner';
+      const chosenPlan = activePlan || storedRecord.activePlan || (chosenUserType === 'Dealer / Agent' ? 'Pro Agent Plan' : 'Free Starter (30 Days)');
+      const vDays = Number(validityDays || storedRecord.validityDays || (chosenUserType === 'Dealer / Agent' ? 90 : 30));
+      const planExpiresAt = new Date(Date.now() + vDays * 24 * 60 * 60 * 1000);
 
       user = await User.create({
         name: clientName,
@@ -321,6 +327,10 @@ export const verifyOtp = async (req, res) => {
         phone: phone?.trim() || storedRecord.phone || null,
         userType: chosenUserType,
         role: 'user', // Client role
+        activePlan: chosenPlan,
+        listingLimit: chosenUserType === 'Dealer / Agent' ? 50 : 2,
+        featuredLimit: chosenUserType === 'Dealer / Agent' ? 5 : 0,
+        planExpiresAt,
       });
       console.log(`🎉 New client account registered via OTP: ${cleanEmail}`);
     } else {
@@ -329,12 +339,16 @@ export const verifyOtp = async (req, res) => {
       }
       if (phone && !user.phone) {
         user.phone = phone.trim();
-        await user.save();
       }
       if (userType && user.userType !== userType) {
         user.userType = userType;
-        await user.save();
       }
+      if (activePlan) {
+        user.activePlan = activePlan;
+        const vDays = Number(validityDays || 30);
+        user.planExpiresAt = new Date(Date.now() + vDays * 24 * 60 * 60 * 1000);
+      }
+      await user.save();
       console.log(`✅ Existing client authenticated via OTP: ${cleanEmail}`);
     }
 

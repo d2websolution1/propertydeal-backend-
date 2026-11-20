@@ -467,6 +467,13 @@ export const postPublicProperty = async (req, res) => {
       }
     }
 
+    if (!title || !String(title).trim()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Property Title is compulsory. Please provide a clear title.',
+      });
+    }
+
     // Check Listing Quota for logged in user (if not admin)
     if (authUser && authUser.role !== 'admin') {
       const userActiveListingsCount = await Property.countDocuments({
@@ -569,7 +576,7 @@ export const postPublicProperty = async (req, res) => {
       validOwnerId = ownerId;
     }
 
-    const uniqueCode = 'PA-' + Date.now().toString(36).toUpperCase() + '-' + Math.floor(100 + Math.random() * 900);
+    const uniqueCode = req.body.uniqueCode || ('PA-' + Math.floor(100000 + Math.random() * 900000));
 
     // If an admin posts it, auto-approve. If a user posts, set to pending so Admin can review & permit it!
     const initialStatus = authUser?.role === 'admin' ? 'approved' : 'pending';
@@ -626,6 +633,7 @@ export const postPublicProperty = async (req, res) => {
       maintenanceCharges: safeNum(maintenanceCharges),
       isNegotiable: !!isNegotiable,
       reraNumber: reraNumber ? reraNumber.trim() : '',
+      approvedAuthority: req.body.approvedAuthority || 'JDA Approved',
       contactName: resolvedName,
       contactEmail: resolvedEmail,
       contactPhone: resolvedPhone,

@@ -180,6 +180,10 @@ const propertySchema = new mongoose.Schema({
     type: String,
     default: '',
   },
+  approvedAuthority: {
+    type: String,
+    default: 'JDA Approved',
+  },
   contactName: {
     type: String,
     default: '',
