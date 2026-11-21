@@ -228,13 +228,15 @@ export const getMe = async (req, res) => {
       return res.status(404).json({ message: 'User not found' });
     }
 
-    // Auto-promote recognized administrator emails
-    if (isAdminEmail(user.email) && user.role !== 'admin') {
-      user.role = 'admin';
-      try {
-        await user.save();
-        console.log(`⭐ Auto-promoted admin user in getMe: ${user.email}`);
-      } catch (saveErr) {}
+    // Auto-promote ONLY recognized administrator emails (admin@property-adda.com)
+    if (isAdminEmail(user.email)) {
+      if (user.role !== 'admin') {
+        user.role = 'admin';
+        try { await user.save(); } catch (saveErr) {}
+      }
+    } else if (user.role === 'admin') {
+      user.role = 'user';
+      try { await user.save(); } catch (saveErr) {}
     }
 
     res.json({ user: sanitizeUser(user) });

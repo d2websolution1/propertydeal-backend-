@@ -5,8 +5,6 @@ import User from '../models/User.js';
 export const ADMIN_EMAILS = [
   'admin@property-adda.com',
   'admin@propertyadda.com',
-  'pkrdx71@gmail.com',
-  'prince09kumar7714@gmail.com',
 ];
 
 export const isAdminEmail = (email) => {
@@ -73,15 +71,20 @@ export const protect = async (req, res, next) => {
       return res.status(403).json({ message: 'Your account has been blocked' });
     }
 
-    // Auto-promote recognized administrator emails to admin role
-    if (isAdminEmail(user.email) && user.role !== 'admin') {
-      user.role = 'admin';
+    // Auto-promote ONLY recognized main administrator email (admin@property-adda.com)
+    if (isAdminEmail(user.email)) {
+      if (user.role !== 'admin') {
+        user.role = 'admin';
+        try {
+          await user.save();
+        } catch (saveErr) {}
+      }
+    } else if (user.role === 'admin') {
+      // Demote anyone else who was mistakenly set to admin back to client user role
+      user.role = 'user';
       try {
         await user.save();
-        console.log(`⭐ Auto-promoted administrator email to admin role: ${user.email}`);
-      } catch (saveErr) {
-        console.warn('Could not persist admin role in DB:', saveErr.message);
-      }
+      } catch (e) {}
     }
 
     req.user = user;
@@ -93,17 +96,9 @@ export const protect = async (req, res, next) => {
 };
 
 export const adminOnly = async (req, res, next) => {
-  const isMatch = req.user?.role === 'admin' || isAdminEmail(req.user?.email);
+  const isMatch = req.user?.role === 'admin' && isAdminEmail(req.user?.email);
   if (isMatch) {
-    if (req.user && req.user.role !== 'admin') {
-      req.user.role = 'admin';
-      try {
-        await req.user.save();
-      } catch (saveErr) {
-        console.warn('Could not persist admin role in DB:', saveErr.message);
-      }
-    }
     return next();
   }
-  return res.status(403).json({ message: 'Admin access only' });
+  return res.status(403).json({ message: 'Admin access only. This panel is reserved for the site administrator.' });
 };
