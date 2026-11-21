@@ -26,7 +26,9 @@ router.get('/verified', getVerifiedProperties);
 
 router.get('/', getAllProperties);
 router.patch('/:id/approve', approveProperty);
+router.put('/:id/approve', approveProperty);
 router.patch('/:id/reject', rejectProperty);
+router.put('/:id/reject', rejectProperty);
 router.patch('/:id/feature', toggleFeaturedAdmin);
 router.put('/:id/featured', toggleFeatured);
 router.delete('/:id/featured', removeFeatured);

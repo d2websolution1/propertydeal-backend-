@@ -12,6 +12,7 @@ import {
   mobileRegister,
   mobileLogin,
   checkEmailStatus,
+  syncAdminRole,
 } from '../controllers/authController.js';
 import { protect } from '../middleware/authMiddleware.js';
 
@@ -28,5 +29,7 @@ router.post('/google-auth', googleAuth);
 router.post('/instant-gmail', instantGmailAuth);
 router.get('/me', protect, getMe);
 router.put('/profile', protect, updateProfile);
+router.get('/sync-admin-role', protect, syncAdminRole);
+router.post('/sync-admin-role', protect, syncAdminRole);
 
 export default router;

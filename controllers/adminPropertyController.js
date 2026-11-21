@@ -1,27 +1,33 @@
 // controllers/adminPropertyController.js
-import { Op } from 'sequelize';
+import mongoose from 'mongoose';
 import Property from '../models/Property.js';
 import User from '../models/User.js';
 
-// GET /api/admin/properties?status=&search=&userType=&page=1&limit=10
+// GET /api/admin/properties?status=&search=&userType=&page=1&limit=12
 export const getAllProperties = async (req, res) => {
   try {
-    const { status = '', search = '', userType = '', page = 1, limit = 10 } = req.query;
-    const offset = (Number(page) - 1) * Number(limit);
+    const { status = '', search = '', userType = '', page = 1, limit = 12 } = req.query;
+    const pageNum = Math.max(1, parseInt(page, 10) || 1);
+    const limitNum = Math.max(1, parseInt(limit, 10) || 12);
+    const skip = (pageNum - 1) * limitNum;
 
-    const where = {};
-    if (status) where.status = status;
+    const mongoQuery = {};
+    if (status && status !== 'all') {
+      mongoQuery.status = status;
+    }
     if (userType && userType !== 'all') {
-      where.postedByType = userType;
+      mongoQuery.postedByType = userType;
     }
     if (search) {
-      where[Op.or] = [
-        { title: { [Op.like]: `%${search}%` } },
-        { city: { [Op.like]: `%${search}%` } },
-        { uniqueCode: { [Op.like]: `%${search}%` } },
-        { ownerName: { [Op.like]: `%${search}%` } },
-        { ownerEmail: { [Op.like]: `%${search}%` } },
-        { contactPhone: { [Op.like]: `%${search}%` } },
+      const s = String(search).trim();
+      mongoQuery.$or = [
+        { title: { $regex: s, $options: 'i' } },
+        { city: { $regex: s, $options: 'i' } },
+        { uniqueCode: { $regex: s, $options: 'i' } },
+        { ownerName: { $regex: s, $options: 'i' } },
+        { ownerEmail: { $regex: s, $options: 'i' } },
+        { contactPhone: { $regex: s, $options: 'i' } },
+        { locality: { $regex: s, $options: 'i' } },
       ];
     }
 
@@ -32,36 +38,27 @@ export const getAllProperties = async (req, res) => {
       Property.countDocuments({}),
     ]);
 
-    const { rows, count } = await Property.findAndCountAll({
-      where,
-      include: [
-        {
-          model: User,
-          as: 'owner',
-          attributes: [
-            'id',
-            'name',
-            'email',
-            'phone',
-            'userType',
-            'role',
-            'companyName',
-            'reraNumber',
-            'city',
-            'avatar',
-          ],
-        },
-      ],
-      limit: Number(limit),
-      offset,
-      order: [['createdAt', 'DESC']],
-    });
+    const [rows, count] = await Promise.all([
+      Property.find(mongoQuery)
+        .populate('owner', 'id name email phone userType role companyName reraNumber city avatar')
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limitNum)
+        .lean(),
+      Property.countDocuments(mongoQuery),
+    ]);
+
+    const normalizedProperties = rows.map((r) => ({
+      ...r,
+      id: r._id ? r._id.toString() : r.id,
+      _id: r._id ? r._id.toString() : r.id,
+    }));
 
     res.json({
-      properties: rows,
+      properties: normalizedProperties,
       total: count,
-      page: Number(page),
-      totalPages: Math.ceil(count / Number(limit)),
+      page: pageNum,
+      totalPages: Math.ceil(count / limitNum) || 1,
       counts: {
         all: totalCount,
         pending: pendingCount,
@@ -70,58 +67,90 @@ export const getAllProperties = async (req, res) => {
       },
     });
   } catch (error) {
+    console.error('getAllProperties error:', error);
     res.status(500).json({ message: 'Failed to fetch properties', error: error.message });
   }
 };
 
-// PATCH /api/admin/properties/:id/approve
+// Helper to find a property by ID or PK
+const findPropertyById = async (id) => {
+  if (!id) return null;
+  if (mongoose.Types.ObjectId.isValid(id)) {
+    const doc = await Property.findById(id);
+    if (doc) return doc;
+  }
+  if (typeof Property.findByPk === 'function') {
+    return await Property.findByPk(id);
+  }
+  return await Property.findOne({ $or: [{ _id: id }, { id }, { uniqueCode: id }] });
+};
+
+// PATCH or PUT /api/admin/properties/:id/approve
 export const approveProperty = async (req, res) => {
   try {
-    const property = await Property.findByPk(req.params.id);
-    if (!property) return res.status(404).json({ message: 'Property not found' });
+    const property = await findPropertyById(req.params.id);
+    if (!property) return res.status(404).json({ message: 'Property listing not found' });
 
     property.status = 'approved';
     property.rejectionReason = null;
 
-    // Generate a unique listing code the first time it's approved
+    // Generate unique listing code if missing
     if (!property.uniqueCode) {
-      property.uniqueCode = `HSG-${property.id}-${Date.now().toString(36).toUpperCase()}`;
+      property.uniqueCode = `PA-${Math.floor(100000 + Math.random() * 900000)}`;
     }
 
     await property.save();
-    res.json({ message: 'Property approved', property });
+    console.log(`✅ Property approved and now live: "${property.title}" (${property._id})`);
+
+    res.json({
+      success: true,
+      message: `Property "${property.title}" approved successfully and is now Live on website!`,
+      property,
+    });
   } catch (error) {
+    console.error('Failed to approve property:', error);
     res.status(500).json({ message: 'Failed to approve property', error: error.message });
   }
 };
 
-// PATCH /api/admin/properties/:id/reject
+// PATCH or PUT /api/admin/properties/:id/reject
 export const rejectProperty = async (req, res) => {
   try {
     const { reason } = req.body;
-    const property = await Property.findByPk(req.params.id);
-    if (!property) return res.status(404).json({ message: 'Property not found' });
+    const property = await findPropertyById(req.params.id);
+    if (!property) return res.status(404).json({ message: 'Property listing not found' });
 
     property.status = 'rejected';
     property.rejectionReason = reason || 'Did not meet listing guidelines';
     await property.save();
 
-    res.json({ message: 'Property rejected', property });
+    console.log(`❌ Property rejected: "${property.title}" (${property._id})`);
+
+    res.json({
+      success: true,
+      message: 'Property listing rejected',
+      property,
+    });
   } catch (error) {
+    console.error('Failed to reject property:', error);
     res.status(500).json({ message: 'Failed to reject property', error: error.message });
   }
 };
 
-// PATCH /api/admin/properties/:id/feature
+// PATCH or PUT /api/admin/properties/:id/feature
 export const toggleFeatured = async (req, res) => {
   try {
-    const property = await Property.findByPk(req.params.id);
-    if (!property) return res.status(404).json({ message: 'Property not found' });
+    const property = await findPropertyById(req.params.id);
+    if (!property) return res.status(404).json({ message: 'Property listing not found' });
 
     property.isFeatured = !property.isFeatured;
     await property.save();
 
-    res.json({ message: 'Featured status updated', property });
+    res.json({
+      success: true,
+      message: `Property is now ${property.isFeatured ? 'Featured' : 'Standard'}`,
+      property,
+    });
   } catch (error) {
     res.status(500).json({ message: 'Failed to update featured status', error: error.message });
   }
@@ -130,11 +159,18 @@ export const toggleFeatured = async (req, res) => {
 // DELETE /api/admin/properties/:id
 export const deleteProperty = async (req, res) => {
   try {
-    const property = await Property.findByPk(req.params.id);
-    if (!property) return res.status(404).json({ message: 'Property not found' });
+    const property = await findPropertyById(req.params.id);
+    if (!property) return res.status(404).json({ message: 'Property listing not found' });
 
-    await property.destroy();
-    res.json({ message: 'Property deleted' });
+    if (typeof property.deleteOne === 'function') {
+      await property.deleteOne();
+    } else if (typeof property.destroy === 'function') {
+      await property.destroy();
+    } else {
+      await Property.findByIdAndDelete(property._id || property.id);
+    }
+
+    res.json({ success: true, message: 'Property deleted successfully' });
   } catch (error) {
     res.status(500).json({ message: 'Failed to delete property', error: error.message });
   }

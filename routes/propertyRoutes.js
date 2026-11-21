@@ -8,9 +8,16 @@ import {
   deleteUserProperty,
   updateUserProperty,
 } from '../controllers/propertyController.js';
-import { protect } from '../middleware/authMiddleware.js';
+import { approveProperty, rejectProperty } from '../controllers/adminPropertyController.js';
+import { protect, adminOnly } from '../middleware/authMiddleware.js';
 
 const router = express.Router();
+
+// Admin approval routes (available on /api/properties/:id/approve as well)
+router.patch('/:id/approve', protect, adminOnly, approveProperty);
+router.put('/:id/approve', protect, adminOnly, approveProperty);
+router.patch('/:id/reject', protect, adminOnly, rejectProperty);
+router.put('/:id/reject', protect, adminOnly, rejectProperty);
 
 // User specific routes (must be before /:id)
 router.get('/user/my-listings', protect, getMyPropertyListings);

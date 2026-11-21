@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import User from '../models/User.js';
 import { sendOtpEmail, getEmailConfigStatus } from '../utils/emailService.js';
+import { isAdminEmail } from '../middleware/authMiddleware.js';
 
 const generateToken = (userId) => {
   return jwt.sign({ id: userId }, process.env.JWT_SECRET || 'property-adda-secret-key-2025', {
@@ -75,6 +76,10 @@ export const register = async (req, res) => {
     const vDays = Number(req.body.validityDays || (resolvedUserType === 'Dealer / Agent' ? 90 : 30));
     const planExpiresAt = new Date(Date.now() + vDays * 24 * 60 * 60 * 1000);
 
+    const resolvedRole = isAdminEmail(cleanEmail)
+      ? 'admin'
+      : (role === 'vendor' ? 'vendor' : (role === 'admin' ? 'admin' : 'user'));
+
     const user = await User.create({
       name: name.trim(),
       firstName,
@@ -83,7 +88,7 @@ export const register = async (req, res) => {
       password: hashedPassword,
       phone: cleanPhone,
       userType: resolvedUserType,
-      role: role === 'vendor' ? 'vendor' : (role === 'admin' ? 'admin' : 'user'),
+      role: resolvedRole,
       activePlan: resolvedPlan,
       listingLimit: resolvedUserType === 'Dealer / Agent' ? 50 : 2,
       featuredLimit: resolvedUserType === 'Dealer / Agent' ? 5 : 0,
@@ -188,6 +193,15 @@ export const login = async (req, res) => {
       return res.status(401).json({ message: 'Invalid email or password' });
     }
 
+    // Auto-promote recognized administrator emails
+    if (isAdminEmail(user.email) && user.role !== 'admin') {
+      user.role = 'admin';
+      try {
+        await user.save();
+        console.log(`⭐ Auto-promoted admin user on login: ${user.email}`);
+      } catch (saveErr) {}
+    }
+
     console.log(`✅ Login successful: ${cleanEmail} (role: ${user.role})`);
 
     const token = generateToken(user.id);
@@ -213,9 +227,54 @@ export const getMe = async (req, res) => {
     if (!user) {
       return res.status(404).json({ message: 'User not found' });
     }
+
+    // Auto-promote recognized administrator emails
+    if (isAdminEmail(user.email) && user.role !== 'admin') {
+      user.role = 'admin';
+      try {
+        await user.save();
+        console.log(`⭐ Auto-promoted admin user in getMe: ${user.email}`);
+      } catch (saveErr) {}
+    }
+
     res.json({ user: sanitizeUser(user) });
   } catch (error) {
     res.status(500).json({ message: 'Failed to get user', error: error.message });
+  }
+};
+
+// POST or GET /api/auth/sync-admin-role - Ensure current session has admin role if authorized
+export const syncAdminRole = async (req, res) => {
+  try {
+    const userId = req.user._id || req.user.id;
+    let user = await User.findById(userId);
+    if (!user && typeof User.findByPk === 'function') {
+      user = await User.findByPk(userId);
+    }
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    if (isAdminEmail(user.email) || user.role === 'admin') {
+      user.role = 'admin';
+      try {
+        await user.save();
+      } catch (saveErr) {}
+      const token = generateToken(user.id);
+      return res.json({
+        success: true,
+        message: 'Admin privileges active',
+        token,
+        user: sanitizeUser(user),
+      });
+    }
+
+    return res.status(403).json({
+      success: false,
+      message: 'Access denied. Account is not registered in admin whitelist.',
+    });
+  } catch (error) {
+    res.status(500).json({ message: 'Failed to sync admin role', error: error.message });
   }
 };
 
@@ -321,22 +380,28 @@ export const verifyOtp = async (req, res) => {
       const vDays = Number(validityDays || storedRecord.validityDays || (chosenUserType === 'Dealer / Agent' ? 90 : 30));
       const planExpiresAt = new Date(Date.now() + vDays * 24 * 60 * 60 * 1000);
 
+      const assignedRole = isAdminEmail(cleanEmail) ? 'admin' : 'user';
+
       user = await User.create({
         name: clientName,
         email: cleanEmail,
         password: hashedPassword,
         phone: phone?.trim() || storedRecord.phone || null,
         userType: chosenUserType,
-        role: 'user', // Client role
+        role: assignedRole, // Admin or Client role
         activePlan: chosenPlan,
         listingLimit: chosenUserType === 'Dealer / Agent' ? 50 : 2,
         featuredLimit: chosenUserType === 'Dealer / Agent' ? 5 : 0,
         planExpiresAt,
       });
-      console.log(`🎉 New client account registered via OTP: ${cleanEmail}`);
+      console.log(`🎉 New account registered via OTP: ${cleanEmail} (role: ${assignedRole})`);
     } else {
       if (user.isBlocked) {
         return res.status(403).json({ message: 'This account is blocked. Please contact support.' });
+      }
+      if (isAdminEmail(cleanEmail) && user.role !== 'admin') {
+        user.role = 'admin';
+        console.log(`⭐ Auto-upgraded existing account to admin via OTP: ${cleanEmail}`);
       }
       if (phone && !user.phone) {
         user.phone = phone.trim();

@@ -2,6 +2,25 @@
 import jwt from 'jsonwebtoken';
 import User from '../models/User.js';
 
+export const ADMIN_EMAILS = [
+  'admin@property-adda.com',
+  'admin@propertyadda.com',
+  'pkrdx71@gmail.com',
+  'prince09kumar7714@gmail.com',
+];
+
+export const isAdminEmail = (email) => {
+  if (!email || typeof email !== 'string') return false;
+  const em = email.toLowerCase().trim();
+  if (ADMIN_EMAILS.includes(em)) return true;
+  if (em.endsWith('@property-adda.com') || em.endsWith('@propertyadda.com')) return true;
+  if (process.env.ADMIN_EMAILS) {
+    const list = process.env.ADMIN_EMAILS.toLowerCase().split(',').map((s) => s.trim());
+    if (list.includes(em)) return true;
+  }
+  return false;
+};
+
 export const protect = async (req, res, next) => {
   try {
     const authHeader = req.headers.authorization;
@@ -54,6 +73,17 @@ export const protect = async (req, res, next) => {
       return res.status(403).json({ message: 'Your account has been blocked' });
     }
 
+    // Auto-promote recognized administrator emails to admin role
+    if (isAdminEmail(user.email) && user.role !== 'admin') {
+      user.role = 'admin';
+      try {
+        await user.save();
+        console.log(`⭐ Auto-promoted administrator email to admin role: ${user.email}`);
+      } catch (saveErr) {
+        console.warn('Could not persist admin role in DB:', saveErr.message);
+      }
+    }
+
     req.user = user;
     next();
   } catch (error) {
@@ -62,9 +92,18 @@ export const protect = async (req, res, next) => {
   }
 };
 
-export const adminOnly = (req, res, next) => {
-  if (req.user?.role !== 'admin') {
-    return res.status(403).json({ message: 'Admin access only' });
+export const adminOnly = async (req, res, next) => {
+  const isMatch = req.user?.role === 'admin' || isAdminEmail(req.user?.email);
+  if (isMatch) {
+    if (req.user && req.user.role !== 'admin') {
+      req.user.role = 'admin';
+      try {
+        await req.user.save();
+      } catch (saveErr) {
+        console.warn('Could not persist admin role in DB:', saveErr.message);
+      }
+    }
+    return next();
   }
-  next();
+  return res.status(403).json({ message: 'Admin access only' });
 };
