@@ -34,8 +34,8 @@ export const sanitizeUser = (user) => ({
   about: user.about || '',
   isProfileCompleted: !!user.isProfileCompleted,
   favorites: user.favorites || [],
-  activePlan: user.activePlan || 'Free Starter (फ्री में 2 लिस्टिंग)',
-  listingLimit: user.listingLimit !== undefined ? user.listingLimit : 2,
+  activePlan: user.activePlan || null,
+  listingLimit: user.listingLimit !== undefined ? user.listingLimit : 0,
   featuredLimit: user.featuredLimit || 0,
   planExpiresAt: user.planExpiresAt || null,
   isVerifiedAgent: !!user.isVerifiedAgent,
@@ -72,9 +72,9 @@ export const register = async (req, res) => {
     const hashedPassword = await bcrypt.hash(password, 10);
 
     const resolvedUserType = ['Owner', 'Dealer / Agent', 'Builder'].includes(userType) ? userType : 'Owner';
-    const resolvedPlan = req.body.activePlan || (resolvedUserType === 'Dealer / Agent' ? 'Pro Agent Plan' : 'Free Starter (30 Days)');
-    const vDays = Number(req.body.validityDays || (resolvedUserType === 'Dealer / Agent' ? 90 : 30));
-    const planExpiresAt = new Date(Date.now() + vDays * 24 * 60 * 60 * 1000);
+    const resolvedPlan = req.body.activePlan || null;
+    const vDays = Number(req.body.validityDays || 0);
+    const planExpiresAt = vDays > 0 ? new Date(Date.now() + vDays * 24 * 60 * 60 * 1000) : null;
 
     const resolvedRole = isAdminEmail(cleanEmail)
       ? 'admin'
@@ -90,8 +90,8 @@ export const register = async (req, res) => {
       userType: resolvedUserType,
       role: resolvedRole,
       activePlan: resolvedPlan,
-      listingLimit: resolvedUserType === 'Dealer / Agent' ? 50 : 2,
-      featuredLimit: resolvedUserType === 'Dealer / Agent' ? 5 : 0,
+      listingLimit: resolvedPlan ? (resolvedUserType === 'Dealer / Agent' ? 50 : 2) : 0,
+      featuredLimit: resolvedPlan ? (resolvedUserType === 'Dealer / Agent' ? 5 : 0) : 0,
       planExpiresAt,
     });
 
