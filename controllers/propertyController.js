@@ -474,24 +474,7 @@ export const postPublicProperty = async (req, res) => {
       });
     }
 
-    // Check Listing Quota for logged in user (if not admin)
-    if (authUser && authUser.role !== 'admin') {
-      const userActiveListingsCount = await Property.countDocuments({
-        $or: [
-          { owner: authUser._id },
-          ...(authUser.email ? [{ ownerEmail: authUser.email.toLowerCase() }] : []),
-        ],
-      });
-
-      const allowedLimit = authUser.listingLimit !== undefined ? authUser.listingLimit : 2;
-      if (userActiveListingsCount >= allowedLimit) {
-        return res.status(403).json({
-          success: false,
-          quotaExceeded: true,
-          message: `Listing limit reached! You have already posted ${userActiveListingsCount} of ${allowedLimit} allowed properties on your current plan (${authUser.activePlan || 'Free Plan'}). Please subscribe to a plan to list more properties.`,
-        });
-      }
-    }
+    // For client users, property is saved as pending for admin verification and plan confirmation
 
     const finalPurpose = String(purpose || listingType || 'sale').toLowerCase().includes('rent') ? 'rent' : 'sale';
     const finalPrice = safeNum(price) || 0;

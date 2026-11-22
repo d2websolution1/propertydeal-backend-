@@ -105,11 +105,11 @@ const userSchema = new mongoose.Schema({
   },
   activePlan: {
     type: String,
-    default: null,
+    default: 'Free Starter (फ्री में 2 लिस्टिंग)',
   },
   listingLimit: {
     type: Number,
-    default: 0,
+    default: 2,
   },
   featuredLimit: {
     type: Number,
@@ -117,7 +117,7 @@ const userSchema = new mongoose.Schema({
   },
   planExpiresAt: {
     type: Date,
-    default: null,
+    default: () => new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
   },
   isVerifiedAgent: {
     type: Boolean,
