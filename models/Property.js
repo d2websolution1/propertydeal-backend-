@@ -233,6 +233,14 @@ const propertySchema = new mongoose.Schema({
     type: String,
     default: null,
   },
+  hasPendingEdit: {
+    type: Boolean,
+    default: false,
+  },
+  pendingEdit: {
+    type: mongoose.Schema.Types.Mixed,
+    default: null,
+  },
   isFeatured: {
     type: Boolean,
     default: false,

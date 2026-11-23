@@ -13,14 +13,18 @@ export const getAllProperties = async (req, res) => {
 
     const mongoQuery = {};
     if (status && status !== 'all') {
-      mongoQuery.status = status;
+      if (status === 'pending') {
+        mongoQuery.$or = [{ status: 'pending' }, { hasPendingEdit: true }];
+      } else {
+        mongoQuery.status = status;
+      }
     }
     if (userType && userType !== 'all') {
       mongoQuery.postedByType = userType;
     }
     if (search) {
       const s = String(search).trim();
-      mongoQuery.$or = [
+      const searchConditions = [
         { title: { $regex: s, $options: 'i' } },
         { city: { $regex: s, $options: 'i' } },
         { uniqueCode: { $regex: s, $options: 'i' } },
@@ -29,10 +33,16 @@ export const getAllProperties = async (req, res) => {
         { contactPhone: { $regex: s, $options: 'i' } },
         { locality: { $regex: s, $options: 'i' } },
       ];
+      if (mongoQuery.$or) {
+        mongoQuery.$and = [{ $or: mongoQuery.$or }, { $or: searchConditions }];
+        delete mongoQuery.$or;
+      } else {
+        mongoQuery.$or = searchConditions;
+      }
     }
 
     const [pendingCount, approvedCount, rejectedCount, totalCount] = await Promise.all([
-      Property.countDocuments({ status: 'pending' }),
+      Property.countDocuments({ $or: [{ status: 'pending' }, { hasPendingEdit: true }] }),
       Property.countDocuments({ status: 'approved' }),
       Property.countDocuments({ status: 'rejected' }),
       Property.countDocuments({}),
@@ -137,6 +147,18 @@ export const approveProperty = async (req, res) => {
     const property = await findPropertyById(req.params.id);
     if (!property) return res.status(404).json({ message: 'Property listing not found' });
 
+    // If property has pending edits submitted by owner, apply them now so they become live!
+    if (property.hasPendingEdit && property.pendingEdit) {
+      const editData = typeof property.pendingEdit.toObject === 'function'
+        ? property.pendingEdit.toObject()
+        : { ...property.pendingEdit };
+      delete editData.editedAt;
+      delete editData.editedBy;
+      Object.assign(property, editData);
+      property.hasPendingEdit = false;
+      property.pendingEdit = null;
+    }
+
     property.status = 'approved';
     property.rejectionReason = null;
 
@@ -166,15 +188,23 @@ export const rejectProperty = async (req, res) => {
     const property = await findPropertyById(req.params.id);
     if (!property) return res.status(404).json({ message: 'Property listing not found' });
 
-    property.status = 'rejected';
-    property.rejectionReason = reason || 'Did not meet listing guidelines';
+    if (property.hasPendingEdit) {
+      // Rejection of edited changes discards pending edits, keeping previous approved version live!
+      property.hasPendingEdit = false;
+      property.pendingEdit = null;
+      property.rejectionReason = reason || 'Edited changes rejected by admin. Previous version remains live.';
+    } else {
+      property.status = 'rejected';
+      property.rejectionReason = reason || 'Did not meet listing guidelines';
+    }
+
     await property.save();
 
     console.log(`❌ Property rejected: "${property.title}" (${property._id})`);
 
     res.json({
       success: true,
-      message: 'Property listing rejected',
+      message: 'Property rejected / changes discarded',
       property,
     });
   } catch (error) {

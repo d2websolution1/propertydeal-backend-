@@ -330,6 +330,27 @@ You have complete control over your account. You can edit your listings, deactiv
       await NavMenu.insertMany(DEFAULT_NAV_MENUS);
       console.log('✅ Real navigation dropdown menus seeded in MongoDB Atlas!');
     }
+
+    // 8. Revert unapproved edit on live property to previous approved title 'flat for rent' with pendingEdit 'raj place'
+    await Property.updateMany(
+      {
+        $or: [
+          { uniqueCode: 'PA-MWTE5061-390' },
+          { title: 'raj place' },
+        ],
+      },
+      {
+        $set: {
+          title: 'flat for rent',
+          status: 'approved',
+          hasPendingEdit: true,
+          pendingEdit: {
+            title: 'raj place',
+            editedAt: new Date(),
+          },
+        },
+      }
+    );
   } catch (err) {
     console.error('⚠️ Real data seeding error:', err.message);
   }

@@ -250,7 +250,7 @@ export const getMyPropertyListings = async (req, res) => {
     const counts = {
       all: properties.length,
       active: properties.filter((p) => p.status === 'approved').length,
-      pending: properties.filter((p) => p.status === 'pending').length,
+      pending: properties.filter((p) => p.status === 'pending' || p.hasPendingEdit).length,
       rejected: properties.filter((p) => p.status === 'rejected').length,
     };
 
@@ -343,11 +343,44 @@ export const updateUserProperty = async (req, res) => {
       updates.pricePerUnit = Math.round(updates.price / updates.size);
     }
 
+    delete updates.owner;
+    delete updates.ownerId;
+    delete updates.uniqueCode;
+
+    // IF PROPERTY IS ALREADY APPROVED (LIVE ON SITE):
+    // The previous approved version remains live on home page / search.
+    // The new changes are stored in pendingEdit until admin approves!
+    if (property.status === 'approved' && req.user.role !== 'admin') {
+      delete updates.status;
+      delete updates.isApproved;
+
+      const updated = await Property.findByIdAndUpdate(
+        property._id,
+        {
+          $set: {
+            hasPendingEdit: true,
+            pendingEdit: {
+              ...updates,
+              editedAt: new Date(),
+              editedBy: userId,
+            },
+          },
+        },
+        { new: true }
+      );
+
+      return res.json({
+        success: true,
+        message: 'Property changes submitted for admin approval! The previous approved version remains live until admin approves the update.',
+        property: updated,
+      });
+    }
+
     if (req.user.role !== 'admin') {
-      delete updates.owner;
-      delete updates.ownerId;
       updates.status = 'pending';
       updates.isApproved = false;
+      updates.hasPendingEdit = false;
+      updates.pendingEdit = null;
     }
 
     const updated = await Property.findByIdAndUpdate(property._id, updates, { new: true });
