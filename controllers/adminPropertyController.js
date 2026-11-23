@@ -40,7 +40,7 @@ export const getAllProperties = async (req, res) => {
 
     const [rows, count] = await Promise.all([
       Property.find(mongoQuery)
-        .populate('owner', 'id name email phone userType role companyName reraNumber city avatar')
+        .populate('owner', 'id name email phone userType role companyName reraNumber city avatar activePlan')
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limitNum)

@@ -250,6 +250,24 @@ const propertySchema = new mongoose.Schema({
     ref: 'User',
     required: false,
   },
+  selectedPlan: {
+    name: {
+      type: String,
+      default: 'Free Starter (30 Days)',
+    },
+    price: {
+      type: String,
+      default: '₹0',
+    },
+    days: {
+      type: Number,
+      default: 30,
+    },
+    requestedAt: {
+      type: Date,
+      default: Date.now,
+    },
+  },
 }, {
   timestamps: true,
   collection: 'properties',

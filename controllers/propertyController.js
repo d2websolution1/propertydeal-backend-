@@ -423,6 +423,7 @@ export const postPublicProperty = async (req, res) => {
       ownerPhone,
       ownerEmail,
       postedByType,
+      selectedPlan,
     } = req.body;
 
     if (!price || !city) {
@@ -570,6 +571,21 @@ export const postPublicProperty = async (req, res) => {
 
     const chosenFeaturedImage = featuredImage || normalizedImages[0] || '';
 
+    let cleanSelectedPlan = {
+      name: 'Free Starter (30 Days)',
+      price: '₹0',
+      days: 30,
+      requestedAt: new Date(),
+    };
+    if (selectedPlan && typeof selectedPlan === 'object') {
+      cleanSelectedPlan = {
+        name: selectedPlan.name || cleanSelectedPlan.name,
+        price: selectedPlan.price !== undefined ? String(selectedPlan.price) : cleanSelectedPlan.price,
+        days: Number(selectedPlan.days) || 30,
+        requestedAt: new Date(),
+      };
+    }
+
     const property = await Property.create({
       title: autoTitle,
       description: description || '',
@@ -631,6 +647,7 @@ export const postPublicProperty = async (req, res) => {
       isVerified: false, // Verified by Admin only
       uniqueCode,
       owner: validOwnerId,
+      selectedPlan: cleanSelectedPlan,
     });
 
     res.status(201).json({
@@ -641,5 +658,40 @@ export const postPublicProperty = async (req, res) => {
   } catch (error) {
     console.error('Error posting property:', error);
     res.status(500).json({ success: false, message: error.message || 'Failed to post property', error: error.message });
+  }
+};
+
+// PATCH / PUT /api/properties/:id/plan (Update selected plan for a property)
+export const updatePropertyPlan = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { planName, planPrice, planDays } = req.body;
+
+    const query = mongoose.Types.ObjectId.isValid(id)
+      ? { _id: id }
+      : { $or: [{ _id: id }, { uniqueCode: id }] };
+
+    const property = await Property.findOne(query);
+    if (!property) {
+      return res.status(404).json({ success: false, message: 'Property listing not found' });
+    }
+
+    property.selectedPlan = {
+      name: planName || property.selectedPlan?.name || 'Free Starter (30 Days)',
+      price: planPrice !== undefined ? String(planPrice) : (property.selectedPlan?.price || '₹0'),
+      days: Number(planDays) || property.selectedPlan?.days || 30,
+      requestedAt: new Date(),
+    };
+
+    await property.save();
+
+    res.json({
+      success: true,
+      message: 'Plan selection updated successfully',
+      property,
+    });
+  } catch (error) {
+    console.error('Error updating property plan:', error);
+    res.status(500).json({ success: false, message: error.message || 'Failed to update property plan' });
   }
 };

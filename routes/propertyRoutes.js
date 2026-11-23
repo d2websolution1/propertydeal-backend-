@@ -7,6 +7,7 @@ import {
   getMyPropertyListings,
   deleteUserProperty,
   updateUserProperty,
+  updatePropertyPlan,
 } from '../controllers/propertyController.js';
 import { approveProperty, rejectProperty } from '../controllers/adminPropertyController.js';
 import { protect, adminOnly } from '../middleware/authMiddleware.js';
@@ -24,6 +25,10 @@ router.get('/user/my-listings', protect, getMyPropertyListings);
 router.delete('/user/:id', protect, deleteUserProperty);
 router.put('/user/:id', protect, updateUserProperty);
 router.put('/:id', protect, updateUserProperty);
+
+// Update plan for property (Public / User)
+router.patch('/:id/plan', updatePropertyPlan);
+router.put('/:id/plan', updatePropertyPlan);
 
 // Public routes
 router.get('/', getPublicProperties);
