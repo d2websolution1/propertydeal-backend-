@@ -543,7 +543,7 @@ export const postPublicProperty = async (req, res) => {
             phone: resolvedPhone || null,
             role: 'user',
             userType: resolvedUserType,
-            activePlan: 'Free Starter (फ्री में 2 लिस्टिंग)',
+            activePlan: 'Free Starter (30 Days)',
             listingLimit: 2,
           });
         } catch (createErr) {
@@ -554,6 +554,25 @@ export const postPublicProperty = async (req, res) => {
       if (owner) {
         ownerId = owner._id;
         resolvedUserType = owner.userType || resolvedUserType;
+      }
+    }
+
+    // Quota Enforcement: Check user's active plan listing limit
+    const postingUser = authUser || (resolvedEmail ? await User.findOne({ email: resolvedEmail }) : null);
+    if (postingUser && postingUser.role !== 'admin') {
+      const userPropCount = await Property.countDocuments({
+        $or: [
+          { owner: postingUser._id },
+          { ownerEmail: postingUser.email.toLowerCase().trim() },
+        ],
+      });
+      const allowedLimit = postingUser.listingLimit !== undefined ? postingUser.listingLimit : 2;
+      if (userPropCount >= allowedLimit) {
+        return res.status(403).json({
+          success: false,
+          quotaExceeded: true,
+          message: `Listing limit reached (${userPropCount}/${allowedLimit} properties posted). Please upgrade your subscription plan to post more properties.`,
+        });
       }
     }
 

@@ -152,6 +152,49 @@ export const updatePayment = async (req, res) => {
     if (notes !== undefined) payment.notes = notes;
 
     await payment.save();
+
+    // If payment is completed, auto-activate plan for user
+    if (payment.status === 'completed' && payment.userEmail) {
+      try {
+        const u = await User.findOne({ email: payment.userEmail.toLowerCase().trim() });
+        if (u) {
+          const planStr = (payment.plan || '').toLowerCase();
+          let limit = u.listingLimit || 2;
+          let days = 30;
+          let featured = 0;
+          if (planStr.includes('gold') || planStr.includes('499')) {
+            limit = Math.max(limit, 5);
+            days = 60;
+            featured = 1;
+          } else if (planStr.includes('annual owner') || planStr.includes('1499')) {
+            limit = Math.max(limit, 20);
+            days = 365;
+            featured = 5;
+          } else if (planStr.includes('pro agent') || planStr.includes('1999')) {
+            limit = Math.max(limit, 50);
+            days = 90;
+            featured = 5;
+          } else if (planStr.includes('standard agent') || planStr.includes('999')) {
+            limit = Math.max(limit, 20);
+            days = 45;
+            featured = 2;
+          } else if (planStr.includes('annual agent') || planStr.includes('4999')) {
+            limit = Math.max(limit, 200);
+            days = 365;
+            featured = 20;
+          }
+          u.activePlan = payment.plan || u.activePlan;
+          u.listingLimit = limit;
+          u.featuredLimit = (u.featuredLimit || 0) + featured;
+          u.planExpiresAt = new Date(Date.now() + days * 24 * 60 * 60 * 1000);
+          await u.save();
+          console.log(`✅ Activated plan "${u.activePlan}" for ${u.email} on payment completion`);
+        }
+      } catch (userErr) {
+        console.warn('Could not auto-activate user on payment completion:', userErr.message);
+      }
+    }
+
     res.json({ success: true, payment, message: 'Payment updated successfully' });
   } catch (error) {
     console.error('Error updating payment:', error);

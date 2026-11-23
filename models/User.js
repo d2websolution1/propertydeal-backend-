@@ -105,7 +105,7 @@ const userSchema = new mongoose.Schema({
   },
   activePlan: {
     type: String,
-    default: 'Free Starter (फ्री में 2 लिस्टिंग)',
+    default: 'Free Starter (30 Days)',
   },
   listingLimit: {
     type: Number,

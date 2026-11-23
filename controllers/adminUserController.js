@@ -1,6 +1,7 @@
 // controllers/adminUserController.js
 import { Op } from 'sequelize';
 import User from '../models/User.js';
+import Payment from '../models/Payment.js';
 
 // GET /api/admin/users?search=&role=&page=1&limit=10
 export const getAllUsers = async (req, res) => {
@@ -183,5 +184,70 @@ export const deleteUser = async (req, res) => {
     res.json({ message: 'User deleted successfully' });
   } catch (error) {
     res.status(500).json({ message: 'Failed to delete user', error: error.message });
+  }
+};
+
+// PUT /api/admin/users/:id/activate-plan - Admin directly activates/upgrades plan for a user
+export const activateUserPlan = async (req, res) => {
+  try {
+    const user = (await User.findByPk(req.params.id)) || (await User.findById(req.params.id));
+    if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+
+    const { planName, listingLimit, validityDays, featuredLimit, price } = req.body;
+    const days = Number(validityDays) || 30;
+    const limit = Number(listingLimit) || 5;
+    const featured = Number(featuredLimit) || 0;
+    const expiresAt = new Date(Date.now() + days * 24 * 60 * 60 * 1000);
+
+    user.activePlan = planName || 'Gold Owner Plan (60 Days)';
+    user.listingLimit = limit;
+    user.featuredLimit = (user.featuredLimit || 0) + featured;
+    user.planExpiresAt = expiresAt;
+    await user.save();
+
+    // Also record completed payment for Admin audit & billing
+    try {
+      const txId = `ACT-${Date.now().toString(36).toUpperCase()}-${Math.floor(1000 + Math.random() * 9000)}`;
+      await Payment.create({
+        transactionId: txId,
+        user: user._id || user.id,
+        userName: user.name,
+        userEmail: user.email,
+        userPhone: user.phone || '',
+        userType: user.userType || 'Owner',
+        plan: user.activePlan,
+        amount: Number(price) || (user.activePlan.includes('499') ? 499 : user.activePlan.includes('1499') ? 1499 : 0),
+        currency: 'INR',
+        status: 'completed',
+        paymentMethod: 'Admin Activation / WhatsApp Chat',
+        paidAt: new Date(),
+        expiresAt,
+        notes: `Plan activated by Admin. Listing quota updated to ${limit} properties (${days} days validity).`,
+      });
+    } catch (payErr) {
+      console.warn('Payment logging on plan activation:', payErr.message);
+    }
+
+    console.log(`✅ Admin activated plan "${user.activePlan}" for user ${user.email} (Limit: ${limit})`);
+
+    res.json({
+      success: true,
+      message: `Plan "${user.activePlan}" activated successfully for ${user.name}! Quota updated to ${limit} listings.`,
+      user: {
+        id: user.id || user._id,
+        _id: user._id || user.id,
+        name: user.name,
+        email: user.email,
+        phone: user.phone,
+        userType: user.userType,
+        activePlan: user.activePlan,
+        listingLimit: user.listingLimit,
+        featuredLimit: user.featuredLimit,
+        planExpiresAt: user.planExpiresAt,
+      },
+    });
+  } catch (error) {
+    console.error('Error activating user plan:', error);
+    res.status(500).json({ success: false, message: 'Failed to activate plan', error: error.message });
   }
 };

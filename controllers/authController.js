@@ -34,7 +34,7 @@ export const sanitizeUser = (user) => ({
   about: user.about || '',
   isProfileCompleted: !!user.isProfileCompleted,
   favorites: user.favorites || [],
-  activePlan: user.activePlan || 'Free Starter (फ्री में 2 लिस्टिंग)',
+  activePlan: user.activePlan || 'Free Starter (30 Days)',
   listingLimit: user.listingLimit !== undefined ? user.listingLimit : 2,
   featuredLimit: user.featuredLimit || 0,
   planExpiresAt: user.planExpiresAt || null,
