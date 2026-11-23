@@ -17,9 +17,9 @@ const router = express.Router();
 router.use(protect, adminOnly);
 
 router.get('/', getAllUsers);
+router.put('/:id/activate-plan', activateUserPlan);
 router.get('/:id', getUserProfile);
 router.put('/:id', updateUserProfile);
-router.put('/:id/activate-plan', activateUserPlan);
 router.patch('/:id/block', blockUser);
 router.patch('/:id/unblock', unblockUser);
 router.delete('/:id', deleteUser);

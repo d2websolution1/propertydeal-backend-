@@ -1,7 +1,9 @@
 // controllers/adminUserController.js
+import mongoose from 'mongoose';
 import { Op } from 'sequelize';
 import User from '../models/User.js';
 import Payment from '../models/Payment.js';
+import Property from '../models/Property.js';
 
 // GET /api/admin/users?search=&role=&page=1&limit=10
 export const getAllUsers = async (req, res) => {
@@ -190,33 +192,121 @@ export const deleteUser = async (req, res) => {
 // PUT /api/admin/users/:id/activate-plan - Admin directly activates/upgrades plan for a user
 export const activateUserPlan = async (req, res) => {
   try {
-    const user = (await User.findByPk(req.params.id)) || (await User.findById(req.params.id));
-    if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+    const rawId = req.params.id;
+    let user = null;
+
+    if (mongoose.Types.ObjectId.isValid(rawId)) {
+      try {
+        user = await User.findById(rawId);
+      } catch (e) {}
+    }
+
+    if (!user) {
+      try {
+        user = await User.findOne({
+          $or: [
+            ...(mongoose.Types.ObjectId.isValid(rawId) ? [{ _id: rawId }] : []),
+            { email: rawId },
+            { id: rawId },
+          ],
+        });
+      } catch (e) {}
+    }
+
+    if (!user && typeof User.findByPk === 'function') {
+      try {
+        user = await User.findByPk(rawId);
+      } catch (e) {}
+    }
+
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found in database' });
+    }
 
     const { planName, listingLimit, validityDays, featuredLimit, price } = req.body;
     const days = Number(validityDays) || 30;
     const limit = Number(listingLimit) || 5;
     const featured = Number(featuredLimit) || 0;
     const expiresAt = new Date(Date.now() + days * 24 * 60 * 60 * 1000);
+    const chosenPlan = planName || 'Gold Owner Plan (60 Days)';
 
-    user.activePlan = planName || 'Gold Owner Plan (60 Days)';
+    const userDocId = user._id || user.id;
+
+    // Use updateOne to update user document without failing on unrelated missing fields (e.g. password)
+    await User.updateOne(
+      { _id: userDocId },
+      {
+        $set: {
+          activePlan: chosenPlan,
+          listingLimit: limit,
+          featuredLimit: (user.featuredLimit || 0) + featured,
+          planExpiresAt: expiresAt,
+        },
+      }
+    );
+
+    // Update in-memory user object
+    user.activePlan = chosenPlan;
     user.listingLimit = limit;
     user.featuredLimit = (user.featuredLimit || 0) + featured;
     user.planExpiresAt = expiresAt;
-    await user.save();
+
+    // Immediately synchronize selectedPlan on all properties posted by this user so Manage Properties reflects it
+    try {
+      const priceTag =
+        Number(price) > 0
+          ? `₹${price}`
+          : chosenPlan.includes('499')
+          ? '₹499'
+          : chosenPlan.includes('1499')
+          ? '₹1499'
+          : chosenPlan.includes('999')
+          ? '₹999'
+          : '₹0';
+
+      const propFilter = {
+        $or: [
+          { owner: userDocId },
+          ...(user.email ? [{ ownerEmail: user.email }, { contactEmail: user.email }] : []),
+        ],
+      };
+
+      await Property.updateMany(propFilter, {
+        $set: {
+          'selectedPlan.name': chosenPlan,
+          'selectedPlan.price': priceTag,
+          'selectedPlan.days': days,
+        },
+      });
+    } catch (propErr) {
+      console.warn('Property sync on plan activation:', propErr.message);
+    }
 
     // Also record completed payment for Admin audit & billing
     try {
       const txId = `ACT-${Date.now().toString(36).toUpperCase()}-${Math.floor(1000 + Math.random() * 9000)}`;
+      const validUserType = ['Owner', 'Dealer / Agent', 'Builder', 'Client', 'Buyer'].includes(user.userType)
+        ? user.userType
+        : 'Owner';
+
       await Payment.create({
         transactionId: txId,
-        user: user._id || user.id,
-        userName: user.name,
+        user: userDocId,
+        userName: user.name || user.email || 'User',
         userEmail: user.email,
         userPhone: user.phone || '',
-        userType: user.userType || 'Owner',
-        plan: user.activePlan,
-        amount: Number(price) || (user.activePlan.includes('499') ? 499 : user.activePlan.includes('1499') ? 1499 : 0),
+        userType: validUserType,
+        plan: chosenPlan,
+        amount:
+          Number(price) >= 0
+            ? Number(price)
+            : chosenPlan.includes('499')
+            ? 499
+            : chosenPlan.includes('1499')
+            ? 1499
+            : chosenPlan.includes('999')
+            ? 999
+            : 0,
         currency: 'INR',
         status: 'completed',
         paymentMethod: 'Admin Activation / WhatsApp Chat',
@@ -228,11 +318,11 @@ export const activateUserPlan = async (req, res) => {
       console.warn('Payment logging on plan activation:', payErr.message);
     }
 
-    console.log(`✅ Admin activated plan "${user.activePlan}" for user ${user.email} (Limit: ${limit})`);
+    console.log(`✅ Admin activated plan "${chosenPlan}" for user ${user.email} (Limit: ${limit})`);
 
     res.json({
       success: true,
-      message: `Plan "${user.activePlan}" activated successfully for ${user.name}! Quota updated to ${limit} listings.`,
+      message: `Plan "${chosenPlan}" activated successfully for ${user.name || user.email}! Quota updated to ${limit} listings.`,
       user: {
         id: user.id || user._id,
         _id: user._id || user.id,
@@ -240,10 +330,10 @@ export const activateUserPlan = async (req, res) => {
         email: user.email,
         phone: user.phone,
         userType: user.userType,
-        activePlan: user.activePlan,
-        listingLimit: user.listingLimit,
+        activePlan: chosenPlan,
+        listingLimit: limit,
         featuredLimit: user.featuredLimit,
-        planExpiresAt: user.planExpiresAt,
+        planExpiresAt: expiresAt,
       },
     });
   } catch (error) {

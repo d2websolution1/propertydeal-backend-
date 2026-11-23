@@ -48,11 +48,57 @@ export const getAllProperties = async (req, res) => {
       Property.countDocuments(mongoQuery),
     ]);
 
-    const normalizedProperties = rows.map((r) => ({
-      ...r,
-      id: r._id ? r._id.toString() : r.id,
-      _id: r._id ? r._id.toString() : r.id,
-    }));
+    // Find any missing owners by email to guarantee activePlan is always present
+    const unpopulatedEmails = rows
+      .filter((r) => !r.owner || !r.owner.activePlan)
+      .map((r) => (r.ownerEmail || r.contactEmail || '').toLowerCase().trim())
+      .filter(Boolean);
+
+    let emailUserMap = new Map();
+    if (unpopulatedEmails.length > 0) {
+      try {
+        const users = await User.find({ email: { $in: unpopulatedEmails } })
+          .select('id name email phone userType role companyName reraNumber city avatar activePlan')
+          .lean();
+        users.forEach((u) => {
+          if (u.email) emailUserMap.set(u.email.toLowerCase().trim(), u);
+        });
+      } catch (uErr) {
+        console.warn('Error fetching unpopulated owners in admin properties:', uErr.message);
+      }
+    }
+
+    const normalizedProperties = rows.map((r) => {
+      let ownerObj = r.owner || null;
+      const email = (r.ownerEmail || r.contactEmail || '').toLowerCase().trim();
+      if ((!ownerObj || !ownerObj.activePlan) && email && emailUserMap.has(email)) {
+        ownerObj = { ...(ownerObj || {}), ...emailUserMap.get(email) };
+      }
+
+      // If user has an upgraded active plan, ensure selectedPlan reflects it
+      let selectedPlan = r.selectedPlan;
+      if (ownerObj?.activePlan && ownerObj.activePlan !== 'Free Starter (30 Days)') {
+        selectedPlan = {
+          name: ownerObj.activePlan,
+          price: ownerObj.activePlan.includes('499')
+            ? '₹499'
+            : ownerObj.activePlan.includes('1499')
+            ? '₹1499'
+            : ownerObj.activePlan.includes('999')
+            ? '₹999'
+            : selectedPlan?.price || '₹0',
+          days: selectedPlan?.days || (ownerObj.activePlan.includes('60') ? 60 : ownerObj.activePlan.includes('365') ? 365 : 30),
+        };
+      }
+
+      return {
+        ...r,
+        id: r._id ? r._id.toString() : r.id,
+        _id: r._id ? r._id.toString() : r.id,
+        owner: ownerObj,
+        selectedPlan,
+      };
+    });
 
     res.json({
       properties: normalizedProperties,
