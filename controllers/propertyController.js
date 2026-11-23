@@ -36,12 +36,44 @@ export const getPublicProperties = async (req, res) => {
       status: 'approved',
     };
 
-    const finalPurpose = purpose || listingType;
-    if (finalPurpose && finalPurpose !== 'all') {
-      where[Op.or] = [
-        { listingType: finalPurpose },
-        { purpose: finalPurpose },
-      ];
+    const andConditions = [];
+
+    const rawPurpose = String(purpose || listingType || '').toLowerCase().trim();
+    if (rawPurpose && rawPurpose !== 'all') {
+      const isRent = rawPurpose.includes('rent') || rawPurpose.includes('lease');
+      const isSale = rawPurpose.includes('sale') || rawPurpose.includes('buy');
+      if (isRent) {
+        andConditions.push({
+          [Op.or]: [
+            { listingType: 'rent' },
+            { purpose: 'rent' },
+            { listingType: { [Op.like]: '%rent%' } },
+            { purpose: { [Op.like]: '%rent%' } },
+            { listingType: { [Op.like]: '%lease%' } },
+            { purpose: { [Op.like]: '%lease%' } },
+          ],
+        });
+      } else if (isSale) {
+        andConditions.push({
+          [Op.or]: [
+            { listingType: 'sale' },
+            { purpose: 'sale' },
+            { listingType: { [Op.like]: '%sale%' } },
+            { purpose: { [Op.like]: '%sale%' } },
+            { listingType: { [Op.like]: '%buy%' } },
+            { purpose: { [Op.like]: '%buy%' } },
+          ],
+        });
+      } else {
+        andConditions.push({
+          [Op.or]: [
+            { listingType: rawPurpose },
+            { purpose: rawPurpose },
+            { listingType: { [Op.like]: `%${rawPurpose}%` } },
+            { purpose: { [Op.like]: `%${rawPurpose}%` } },
+          ],
+        });
+      }
     }
 
     if (propertyCategory && propertyCategory !== 'all') {
@@ -56,23 +88,25 @@ export const getPublicProperties = async (req, res) => {
     if (city && city !== 'all' && city !== 'All India') {
       where.city = { [Op.like]: `%${city.trim()}%` };
     } else if (location && location !== 'all' && location !== 'All India') {
-      where[Op.or] = [
-        ...(where[Op.or] || []),
-        { city: { [Op.like]: `%${location}%` } },
-        { locality: { [Op.like]: `%${location}%` } },
-        { address: { [Op.like]: `%${location}%` } },
-        { projectName: { [Op.like]: `%${location}%` } },
-      ];
+      andConditions.push({
+        [Op.or]: [
+          { city: { [Op.like]: `%${location}%` } },
+          { locality: { [Op.like]: `%${location}%` } },
+          { address: { [Op.like]: `%${location}%` } },
+          { projectName: { [Op.like]: `%${location}%` } },
+        ],
+      });
     }
 
     const areaQuery = area || locality;
     if (areaQuery && areaQuery !== 'all') {
-      where[Op.or] = [
-        ...(where[Op.or] || []),
-        { locality: { [Op.like]: `%${areaQuery.trim()}%` } },
-        { projectName: { [Op.like]: `%${areaQuery.trim()}%` } },
-        { areas: { [Op.like]: `%${areaQuery.trim()}%` } },
-      ];
+      andConditions.push({
+        [Op.or]: [
+          { locality: { [Op.like]: `%${areaQuery.trim()}%` } },
+          { projectName: { [Op.like]: `%${areaQuery.trim()}%` } },
+          { areas: { [Op.like]: `%${areaQuery.trim()}%` } },
+        ],
+      });
     }
 
     // Sub Area / Township matching (Multiselect support)
@@ -82,22 +116,24 @@ export const getPublicProperties = async (req, res) => {
         .map((s) => s.trim())
         .filter(Boolean);
       if (subAreaList.length > 0) {
-        where[Op.or] = [
-          ...(where[Op.or] || []),
-          ...subAreaList.map((s) => ({ subAreas: { [Op.like]: `%${s}%` } })),
-          ...subAreaList.map((s) => ({ projectName: { [Op.like]: `%${s}%` } })),
-          ...subAreaList.map((s) => ({ address: { [Op.like]: `%${s}%` } })),
-        ];
+        andConditions.push({
+          [Op.or]: [
+            ...subAreaList.map((s) => ({ subAreas: { [Op.like]: `%${s}%` } })),
+            ...subAreaList.map((s) => ({ projectName: { [Op.like]: `%${s}%` } })),
+            ...subAreaList.map((s) => ({ address: { [Op.like]: `%${s}%` } })),
+          ],
+        });
       }
     }
 
     const bedroomQuery = bedrooms || bhk;
     if (bedroomQuery && bedroomQuery !== 'all') {
-      where[Op.or] = [
-        ...(where[Op.or] || []),
-        { bhk: { [Op.like]: `%${bedroomQuery}%` } },
-        { bedrooms: { [Op.like]: `%${bedroomQuery}%` } },
-      ];
+      andConditions.push({
+        [Op.or]: [
+          { bhk: { [Op.like]: `%${bedroomQuery}%` } },
+          { bedrooms: { [Op.like]: `%${bedroomQuery}%` } },
+        ],
+      });
     }
 
     if (furnishing && furnishing !== 'all') {
@@ -116,11 +152,12 @@ export const getPublicProperties = async (req, res) => {
         .filter(Boolean);
 
       if (amenityList.length > 0) {
-        where[Op.or] = [
-          ...(where[Op.or] || []),
-          ...amenityList.map((a) => ({ amenities: { [Op.like]: `%${a}%` } })),
-          ...amenityList.map((a) => ({ facilities: { [Op.like]: `%${a}%` } })),
-        ];
+        andConditions.push({
+          [Op.or]: [
+            ...amenityList.map((a) => ({ amenities: { [Op.like]: `%${a}%` } })),
+            ...amenityList.map((a) => ({ facilities: { [Op.like]: `%${a}%` } })),
+          ],
+        });
       }
     }
 
@@ -139,16 +176,21 @@ export const getPublicProperties = async (req, res) => {
     }
 
     if (q) {
-      where[Op.or] = [
-        ...(where[Op.or] || []),
-        { title: { [Op.like]: `%${q}%` } },
-        { locality: { [Op.like]: `%${q}%` } },
-        { city: { [Op.like]: `%${q}%` } },
-        { propertyType: { [Op.like]: `%${q}%` } },
-        { projectName: { [Op.like]: `%${q}%` } },
-        { bhk: { [Op.like]: `%${q}%` } },
-        { description: { [Op.like]: `%${q}%` } },
-      ];
+      andConditions.push({
+        [Op.or]: [
+          { title: { [Op.like]: `%${q}%` } },
+          { locality: { [Op.like]: `%${q}%` } },
+          { city: { [Op.like]: `%${q}%` } },
+          { propertyType: { [Op.like]: `%${q}%` } },
+          { projectName: { [Op.like]: `%${q}%` } },
+          { bhk: { [Op.like]: `%${q}%` } },
+          { description: { [Op.like]: `%${q}%` } },
+        ],
+      });
+    }
+
+    if (andConditions.length > 0) {
+      where[Op.and] = andConditions;
     }
 
     const { rows: properties, count } = await Property.findAndCountAll({
