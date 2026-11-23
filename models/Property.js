@@ -182,7 +182,7 @@ const propertySchema = new mongoose.Schema({
   },
   approvedAuthority: {
     type: String,
-    default: 'JDA Approved',
+    default: '',
   },
   contactName: {
     type: String,
