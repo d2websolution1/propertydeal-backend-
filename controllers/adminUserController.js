@@ -149,12 +149,29 @@ export const updateUserProfile = async (req, res) => {
     if (activePlan !== undefined) {
       try {
         const uEmail = (user.email || updateDoc.email || '').toLowerCase().trim();
+        const uPhone = (user.phone || updateDoc.phone || '').trim();
+        const rawPhone = uPhone.replace(/\D/g, '');
         const orConditions = [{ owner: userDocId }];
         if (mongoose.Types.ObjectId.isValid(userDocId)) {
           orConditions.push({ owner: new mongoose.Types.ObjectId(userDocId) });
         }
         if (uEmail) {
-          orConditions.push({ ownerEmail: uEmail }, { contactEmail: uEmail });
+          orConditions.push(
+            { ownerEmail: uEmail },
+            { contactEmail: uEmail },
+            { ownerEmail: { $regex: new RegExp(`^${uEmail}$`, 'i') } },
+            { contactEmail: { $regex: new RegExp(`^${uEmail}$`, 'i') } }
+          );
+        }
+        if (uPhone) {
+          orConditions.push(
+            { ownerPhone: uPhone },
+            { contactPhone: uPhone },
+            ...(rawPhone && rawPhone.length >= 10 ? [
+              { ownerPhone: { $regex: rawPhone } },
+              { contactPhone: { $regex: rawPhone } },
+            ] : [])
+          );
         }
         const planPrice = activePlan.includes('499') ? '₹499' : activePlan.includes('1499') ? '₹1499' : activePlan.includes('999') ? '₹999' : '₹0';
         const planDays = activePlan.includes('60') ? 60 : activePlan.includes('365') ? 365 : 30;
@@ -367,9 +384,14 @@ export const activateUserPlan = async (req, res) => {
         );
       }
       if (userPhone) {
+        const rawDigits = userPhone.replace(/\D/g, '');
         orConditions.push(
           { ownerPhone: userPhone },
-          { contactPhone: userPhone }
+          { contactPhone: userPhone },
+          ...(rawDigits && rawDigits.length >= 10 ? [
+            { ownerPhone: { $regex: rawDigits } },
+            { contactPhone: { $regex: rawDigits } },
+          ] : [])
         );
       }
 

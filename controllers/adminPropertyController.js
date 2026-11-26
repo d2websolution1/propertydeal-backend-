@@ -58,20 +58,38 @@ export const getAllProperties = async (req, res) => {
       Property.countDocuments(mongoQuery),
     ]);
 
-    // Find any missing owners by email to guarantee activePlan is always present
+    // Find any missing owners by email or phone to guarantee activePlan is always present
     const unpopulatedEmails = rows
       .filter((r) => !r.owner || !r.owner.activePlan)
       .map((r) => (r.ownerEmail || r.contactEmail || '').toLowerCase().trim())
       .filter(Boolean);
 
+    const unpopulatedPhones = rows
+      .filter((r) => !r.owner || !r.owner.activePlan)
+      .map((r) => (r.ownerPhone || r.contactPhone || '').replace(/\D/g, ''))
+      .filter((p) => p && p.length >= 10);
+
     let emailUserMap = new Map();
-    if (unpopulatedEmails.length > 0) {
+    if (unpopulatedEmails.length > 0 || unpopulatedPhones.length > 0) {
       try {
-        const users = await User.find({ email: { $in: unpopulatedEmails } })
+        const queryConditions = [];
+        if (unpopulatedEmails.length > 0) queryConditions.push({ email: { $in: unpopulatedEmails } });
+        if (unpopulatedPhones.length > 0) {
+          queryConditions.push({
+            $or: unpopulatedPhones.map((ph) => ({ phone: { $regex: ph } })),
+          });
+        }
+
+        const users = await User.find(queryConditions.length > 1 ? { $or: queryConditions } : queryConditions[0])
           .select('id name email phone userType role companyName reraNumber city avatar activePlan')
           .lean();
+
         users.forEach((u) => {
           if (u.email) emailUserMap.set(u.email.toLowerCase().trim(), u);
+          if (u.phone) {
+            const digits = u.phone.replace(/\D/g, '');
+            if (digits) emailUserMap.set(digits, u);
+          }
         });
       } catch (uErr) {
         console.warn('Error fetching unpopulated owners in admin properties:', uErr.message);
@@ -81,23 +99,39 @@ export const getAllProperties = async (req, res) => {
     const normalizedProperties = rows.map((r) => {
       let ownerObj = r.owner || null;
       const email = (r.ownerEmail || r.contactEmail || '').toLowerCase().trim();
-      if ((!ownerObj || !ownerObj.activePlan) && email && emailUserMap.has(email)) {
-        ownerObj = { ...(ownerObj || {}), ...emailUserMap.get(email) };
+      const phoneDigits = (r.ownerPhone || r.contactPhone || '').replace(/\D/g, '');
+
+      if (!ownerObj || !ownerObj.activePlan) {
+        if (email && emailUserMap.has(email)) {
+          ownerObj = { ...(ownerObj || {}), ...emailUserMap.get(email) };
+        } else if (phoneDigits && emailUserMap.has(phoneDigits)) {
+          ownerObj = { ...(ownerObj || {}), ...emailUserMap.get(phoneDigits) };
+        }
       }
 
       // If user has an upgraded active plan, ensure selectedPlan reflects it
       let selectedPlan = r.selectedPlan;
-      if (ownerObj?.activePlan && ownerObj.activePlan !== 'Free Starter (30 Days)') {
+      const ownerPlan = (ownerObj?.activePlan || '').trim();
+      const isOwnerPlanFree =
+        !ownerPlan ||
+        ownerPlan.toLowerCase().includes('free') ||
+        ownerPlan.toLowerCase().includes('starter');
+
+      if (!isOwnerPlanFree) {
         selectedPlan = {
-          name: ownerObj.activePlan,
-          price: ownerObj.activePlan.includes('499')
+          name: ownerPlan,
+          price: ownerPlan.includes('499')
             ? '₹499'
-            : ownerObj.activePlan.includes('1499')
+            : ownerPlan.includes('1499')
             ? '₹1499'
-            : ownerObj.activePlan.includes('999')
+            : ownerPlan.includes('999')
             ? '₹999'
-            : selectedPlan?.price || '₹0',
-          days: selectedPlan?.days || (ownerObj.activePlan.includes('60') ? 60 : ownerObj.activePlan.includes('365') ? 365 : 30),
+            : ownerPlan.includes('1999')
+            ? '₹1999'
+            : ownerPlan.includes('4999')
+            ? '₹4999'
+            : selectedPlan?.price || '₹499',
+          days: selectedPlan?.days || (ownerPlan.includes('60') ? 60 : ownerPlan.includes('365') ? 365 : ownerPlan.includes('90') ? 90 : ownerPlan.includes('45') ? 45 : 30),
         };
       }
 
