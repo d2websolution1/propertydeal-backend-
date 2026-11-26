@@ -350,7 +350,7 @@ export const updateUserProperty = async (req, res) => {
     // IF PROPERTY IS ALREADY APPROVED (LIVE ON SITE):
     // The previous approved version remains live on home page / search.
     // The new changes are stored in pendingEdit until admin approves!
-    if (property.status === 'approved' && req.user.role !== 'admin') {
+    if (property.status === 'approved') {
       delete updates.status;
       delete updates.isApproved;
 
