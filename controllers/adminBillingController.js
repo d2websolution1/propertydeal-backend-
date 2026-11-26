@@ -226,82 +226,63 @@ export const deletePayment = async (req, res) => {
   }
 };
 
-// Standard subscription packages matching client pricing specifications
+// Standard subscription packages matching client specifications (3 plans only)
 export const STANDARD_SUBSCRIPTION_PLANS = [
   {
     name: 'Free Starter (30 Days)',
     tier: 'free',
-    targetAudience: 'Owner',
+    targetAudience: 'All',
     price: 0,
     billingCycle: 'one-time',
     listingLimit: 2,
     featuredLimit: 0,
     validityDays: 30,
     features: [
-      'Post up to 2 Properties Free',
-      '30 Days Listing Validity',
-      'Direct Buyer Phone & WhatsApp Inquiries',
+      '2 Free Property Listings',
+      '1 Month (30 Days) Validity',
+      'Active by Default for All New Users',
+      'Direct Buyer Phone & Inquiries',
       'Standard Search Placement',
     ],
     badge: 'FREE',
     isActive: true,
   },
   {
-    name: 'Gold Owner Plan (60 Days)',
+    name: 'Gold Plan (90 Days)',
     tier: 'silver',
-    targetAudience: 'Owner',
+    targetAudience: 'All',
     price: 499,
-    billingCycle: 'monthly',
-    listingLimit: 5,
-    featuredLimit: 1,
-    validityDays: 60,
+    billingCycle: 'quarterly',
+    listingLimit: 10,
+    featuredLimit: 2,
+    validityDays: 90,
     features: [
-      'Post up to 5 Properties',
-      '60 Days Extended Validity',
-      'Verified Green Shield Owner Badge',
-      'Top 5 in Search Results Boost',
-      'Instant WhatsApp Inquiries Alert',
+      '10 Property Listings Quota',
+      '3 Months (90 Days) Validity',
+      'Verified Badge on Listings',
+      'Top Search Results Placement',
+      'Direct WhatsApp & Call Inquiries',
     ],
     badge: 'POPULAR',
     isActive: true,
   },
   {
-    name: 'Annual Owner Plan (365 Days)',
+    name: 'Pro Plan (270 Days)',
     tier: 'gold',
-    targetAudience: 'Owner',
-    price: 1499,
-    billingCycle: 'yearly',
-    listingLimit: 20,
+    targetAudience: 'All',
+    price: 999,
+    billingCycle: 'half-yearly',
+    listingLimit: 30,
     featuredLimit: 5,
-    validityDays: 365,
+    validityDays: 270,
     features: [
-      'Post up to 20 Properties',
-      '365 Days Full Year Validity',
-      'Gold Verified Owner Badge',
+      '30 Property Listings Quota',
+      '9 Months (270 Days) Extended Validity',
+      'Gold Verified Badge',
       '5 Featured Boost Slots',
-      'Priority WhatsApp & Phone Leads',
-      'Dedicated Support',
+      'Priority Buyer Leads & Direct Inquiries',
     ],
     badge: 'BEST VALUE',
-    isActive: true,
-  },
-  {
-    name: 'Standard Agent Plan (45 Days)',
-    tier: 'platinum',
-    targetAudience: 'Dealer / Agent',
-    price: 999,
-    billingCycle: 'monthly',
-    listingLimit: 20,
-    featuredLimit: 2,
-    validityDays: 45,
-    features: [
-      'Up to 20 Active Listings',
-      '45 Days Validity',
-      '2 Featured Boost Slots',
-      'Verified Agent Badge',
-      'Direct Client & WhatsApp Enquiries',
-    ],
-    badge: 'AGENT PACK',
     isActive: true,
   },
 ];
@@ -311,19 +292,23 @@ export const getAllSubscriptions = async (req, res) => {
   try {
     let plans = await Subscription.find({}).sort({ price: 1 });
 
-    // If plans are missing or contain old template names, synchronize standard plans
-    const hasGold499 = plans.some((p) => p.name?.includes('499') || p.name?.includes('Gold'));
-    if (!plans || plans.length === 0 || !hasGold499) {
-      for (const sp of STANDARD_SUBSCRIPTION_PLANS) {
-        await Subscription.findOneAndUpdate(
-          { name: sp.name },
-          { $set: sp },
-          { upsert: true, new: true }
-        );
-      }
-      plans = await Subscription.find({}).sort({ price: 1 });
+    // Clean up old legacy plans (1499, 1999, 4999, etc.)
+    await Subscription.deleteMany({
+      $or: [
+        { price: { $in: [1499, 1999, 4999] } },
+        { name: { $regex: /annual|agent plan \(45|pro agent/i } },
+      ],
+    });
+
+    for (const sp of STANDARD_SUBSCRIPTION_PLANS) {
+      await Subscription.findOneAndUpdate(
+        { price: sp.price },
+        { $set: sp },
+        { upsert: true, new: true }
+      );
     }
 
+    plans = await Subscription.find({}).sort({ price: 1 });
     res.json(plans);
   } catch (error) {
     console.error('Error loading subscriptions:', error);
