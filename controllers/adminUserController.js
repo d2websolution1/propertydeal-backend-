@@ -43,12 +43,36 @@ export const getAllUsers = async (req, res) => {
   }
 };
 
+// Helper function to find a user safely by id, email, or phone without CastError
+const findUserSafe = async (rawId) => {
+  if (!rawId || rawId === 'undefined' || rawId === 'null') return null;
+  if (mongoose.Types.ObjectId.isValid(rawId)) {
+    try {
+      const u = await User.findById(rawId);
+      if (u) return u;
+    } catch (e) {}
+  }
+  try {
+    const u = await User.findOne({
+      $or: [
+        { email: String(rawId).toLowerCase().trim() },
+        { phone: String(rawId).trim() },
+      ],
+    });
+    if (u) return u;
+  } catch (e) {}
+  if (typeof User.findByPk === 'function' && mongoose.Types.ObjectId.isValid(rawId)) {
+    try {
+      return await User.findByPk(rawId);
+    } catch (e) {}
+  }
+  return null;
+};
+
 // GET /api/admin/users/:id - Get full user profile
 export const getUserProfile = async (req, res) => {
   try {
-    const user = await User.findByPk(req.params.id, {
-      attributes: { exclude: ['password'] },
-    });
+    const user = await findUserSafe(req.params.id);
     if (!user) return res.status(404).json({ message: 'User not found' });
 
     res.json(user);
@@ -60,7 +84,12 @@ export const getUserProfile = async (req, res) => {
 // PUT /api/admin/users/:id - Update user profile by Admin
 export const updateUserProfile = async (req, res) => {
   try {
-    const user = await User.findByPk(req.params.id);
+    // If route intercepted activate-plan, delegate directly
+    if (req.params.id === 'activate-plan') {
+      return activateUserPlan(req, res);
+    }
+
+    const user = await findUserSafe(req.params.id || req.body.userId || req.body.email);
     if (!user) return res.status(404).json({ message: 'User not found' });
 
     const {
@@ -87,34 +116,62 @@ export const updateUserProfile = async (req, res) => {
       activePlan,
     } = req.body;
 
-    if (name !== undefined) user.name = name.trim();
-    if (firstName !== undefined) user.firstName = firstName.trim();
-    if (lastName !== undefined) user.lastName = lastName.trim();
-    if (email !== undefined) user.email = email.toLowerCase().trim();
-    if (phone !== undefined) user.phone = phone ? phone.trim() : null;
-    if (role !== undefined && ['user', 'vendor', 'admin'].includes(role)) user.role = role;
-    if (userType !== undefined) user.userType = userType;
-    if (city !== undefined) user.city = city.trim();
-    if (companyName !== undefined) user.companyName = companyName.trim();
-    if (reraNumber !== undefined) user.reraNumber = reraNumber.trim();
-    if (operatingSince !== undefined) user.operatingSince = operatingSince.trim();
-    if (teamSize !== undefined) user.teamSize = teamSize.trim();
-    if (localities !== undefined) user.localities = localities.trim();
-    if (about !== undefined) user.about = about.trim();
-    if (isBlocked !== undefined) user.isBlocked = !!isBlocked;
-    if (isProfileCompleted !== undefined) user.isProfileCompleted = !!isProfileCompleted;
-    if (isVerifiedAgent !== undefined) user.isVerifiedAgent = !!isVerifiedAgent;
-    if (agentRequestStatus !== undefined) user.agentRequestStatus = agentRequestStatus;
-    if (listingLimit !== undefined) user.listingLimit = Number(listingLimit);
-    if (featuredLimit !== undefined) user.featuredLimit = Number(featuredLimit);
-    if (activePlan !== undefined) user.activePlan = activePlan;
+    const updateDoc = {};
+    if (name !== undefined) updateDoc.name = name.trim();
+    if (firstName !== undefined) updateDoc.firstName = firstName.trim();
+    if (lastName !== undefined) updateDoc.lastName = lastName.trim();
+    if (email !== undefined) updateDoc.email = email.toLowerCase().trim();
+    if (phone !== undefined) updateDoc.phone = phone ? phone.trim() : null;
+    if (role !== undefined && ['user', 'vendor', 'admin'].includes(role)) updateDoc.role = role;
+    if (userType !== undefined) updateDoc.userType = userType;
+    if (city !== undefined) updateDoc.city = city.trim();
+    if (companyName !== undefined) updateDoc.companyName = companyName.trim();
+    if (reraNumber !== undefined) updateDoc.reraNumber = reraNumber.trim();
+    if (operatingSince !== undefined) updateDoc.operatingSince = operatingSince.trim();
+    if (teamSize !== undefined) updateDoc.teamSize = teamSize.trim();
+    if (localities !== undefined) updateDoc.localities = localities.trim();
+    if (about !== undefined) updateDoc.about = about.trim();
+    if (isBlocked !== undefined) updateDoc.isBlocked = !!isBlocked;
+    if (isProfileCompleted !== undefined) updateDoc.isProfileCompleted = !!isProfileCompleted;
+    if (isVerifiedAgent !== undefined) updateDoc.isVerifiedAgent = !!isVerifiedAgent;
+    if (agentRequestStatus !== undefined) updateDoc.agentRequestStatus = agentRequestStatus;
+    if (listingLimit !== undefined) updateDoc.listingLimit = Number(listingLimit);
+    if (featuredLimit !== undefined) updateDoc.featuredLimit = Number(featuredLimit);
+    if (activePlan !== undefined) updateDoc.activePlan = activePlan;
 
-    await user.save();
+    const userDocId = user._id || user.id;
+
+    // Use updateOne to avoid full schema validation failures on missing password
+    await User.updateOne({ _id: userDocId }, { $set: updateDoc });
+    Object.assign(user, updateDoc);
+
+    // If activePlan changed, sync all user properties
+    if (activePlan !== undefined) {
+      try {
+        const uEmail = (user.email || updateDoc.email || '').toLowerCase().trim();
+        const orConditions = [{ owner: userDocId }];
+        if (mongoose.Types.ObjectId.isValid(userDocId)) {
+          orConditions.push({ owner: new mongoose.Types.ObjectId(userDocId) });
+        }
+        if (uEmail) {
+          orConditions.push({ ownerEmail: uEmail }, { contactEmail: uEmail });
+        }
+        const planPrice = activePlan.includes('499') ? '₹499' : activePlan.includes('1499') ? '₹1499' : activePlan.includes('999') ? '₹999' : '₹0';
+        const planDays = activePlan.includes('60') ? 60 : activePlan.includes('365') ? 365 : 30;
+        await Property.updateMany(
+          { $or: orConditions },
+          { $set: { 'selectedPlan.name': activePlan, 'selectedPlan.price': planPrice, 'selectedPlan.days': planDays } }
+        );
+      } catch (pErr) {
+        console.warn('Property sync in updateUserProfile:', pErr.message);
+      }
+    }
 
     res.json({
       message: 'User profile updated successfully',
       user: {
         id: user.id || user._id,
+        _id: user._id || user.id,
         name: user.name,
         email: user.email,
         phone: user.phone,
@@ -134,6 +191,7 @@ export const updateUserProfile = async (req, res) => {
       },
     });
   } catch (error) {
+    console.error('Error updating user profile:', error);
     res.status(500).json({ message: 'Failed to update user profile', error: error.message });
   }
 };
@@ -141,15 +199,16 @@ export const updateUserProfile = async (req, res) => {
 // PATCH /api/admin/users/:id/block
 export const blockUser = async (req, res) => {
   try {
-    const user = await User.findByPk(req.params.id);
+    const user = await findUserSafe(req.params.id);
     if (!user) return res.status(404).json({ message: 'User not found' });
 
     if (user.role === 'admin') {
       return res.status(400).json({ message: 'Cannot block an admin account' });
     }
 
+    const userDocId = user._id || user.id;
+    await User.updateOne({ _id: userDocId }, { $set: { isBlocked: true } });
     user.isBlocked = true;
-    await user.save();
 
     res.json({ message: 'User blocked successfully', user });
   } catch (error) {
@@ -160,11 +219,12 @@ export const blockUser = async (req, res) => {
 // PATCH /api/admin/users/:id/unblock
 export const unblockUser = async (req, res) => {
   try {
-    const user = await User.findByPk(req.params.id);
+    const user = await findUserSafe(req.params.id);
     if (!user) return res.status(404).json({ message: 'User not found' });
 
+    const userDocId = user._id || user.id;
+    await User.updateOne({ _id: userDocId }, { $set: { isBlocked: false } });
     user.isBlocked = false;
-    await user.save();
 
     res.json({ message: 'User unblocked successfully', user });
   } catch (error) {
@@ -175,14 +235,15 @@ export const unblockUser = async (req, res) => {
 // DELETE /api/admin/users/:id
 export const deleteUser = async (req, res) => {
   try {
-    const user = await User.findByPk(req.params.id);
+    const user = await findUserSafe(req.params.id);
     if (!user) return res.status(404).json({ message: 'User not found' });
 
     if (user.role === 'admin') {
       return res.status(400).json({ message: 'Cannot delete an admin account' });
     }
 
-    await user.destroy();
+    const userDocId = user._id || user.id;
+    await User.deleteOne({ _id: userDocId });
     res.json({ message: 'User deleted successfully' });
   } catch (error) {
     res.status(500).json({ message: 'Failed to delete user', error: error.message });
