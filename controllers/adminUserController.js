@@ -437,13 +437,6 @@ export const activateUserPlan = async (req, res) => {
         expiresAt,
         notes: `Plan activated by Admin. Listing quota updated to ${limit} properties (${days} days validity).`,
       });
-        currency: 'INR',
-        status: 'completed',
-        paymentMethod: 'Admin Activation / WhatsApp Chat',
-        paidAt: new Date(),
-        expiresAt,
-        notes: `Plan activated by Admin. Listing quota updated to ${limit} properties (${days} days validity).`,
-      });
     } catch (payErr) {
       console.warn('Payment logging on plan activation:', payErr.message);
     }

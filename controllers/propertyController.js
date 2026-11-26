@@ -682,6 +682,26 @@ export const postPublicProperty = async (req, res) => {
       };
     }
 
+    const cityLower = String(city || '').toLowerCase().trim();
+    let resolvedState = (state || '').trim();
+    if (cityLower.includes('jaipur') || cityLower.includes('jodhpur') || cityLower.includes('udaipur') || cityLower.includes('kota')) {
+      resolvedState = 'Rajasthan';
+    } else if (cityLower.includes('delhi')) {
+      resolvedState = 'Delhi';
+    } else if (cityLower.includes('noida') || cityLower.includes('lucknow') || cityLower.includes('kanpur') || cityLower.includes('ghaziabad')) {
+      resolvedState = 'Uttar Pradesh';
+    } else if (cityLower.includes('gurgaon') || cityLower.includes('gurugram') || cityLower.includes('faridabad')) {
+      resolvedState = 'Haryana';
+    } else if (cityLower.includes('mumbai') || cityLower.includes('pune') || cityLower.includes('thane')) {
+      resolvedState = 'Maharashtra';
+    } else if (cityLower.includes('bangalore') || cityLower.includes('bengaluru')) {
+      resolvedState = 'Karnataka';
+    } else if (cityLower.includes('hyderabad')) {
+      resolvedState = 'Telangana';
+    } else if (resolvedState.toUpperCase() === 'UP') {
+      resolvedState = '';
+    }
+
     const property = await Property.create({
       title: autoTitle,
       description: description || '',
@@ -716,26 +736,6 @@ export const postPublicProperty = async (req, res) => {
       parking: Array.isArray(parking) ? parking : (parking ? [parking] : []),
       images: normalizedImages,
       featuredImage: chosenFeaturedImage,
-      const cityLower = String(city).toLowerCase().trim();
-      let resolvedState = (state || '').trim();
-      if (cityLower.includes('jaipur') || cityLower.includes('jodhpur') || cityLower.includes('udaipur') || cityLower.includes('kota')) {
-        resolvedState = 'Rajasthan';
-      } else if (cityLower.includes('delhi')) {
-        resolvedState = 'Delhi';
-      } else if (cityLower.includes('noida') || cityLower.includes('lucknow') || cityLower.includes('kanpur') || cityLower.includes('ghaziabad')) {
-        resolvedState = 'Uttar Pradesh';
-      } else if (cityLower.includes('gurgaon') || cityLower.includes('gurugram') || cityLower.includes('faridabad')) {
-        resolvedState = 'Haryana';
-      } else if (cityLower.includes('mumbai') || cityLower.includes('pune') || cityLower.includes('thane')) {
-        resolvedState = 'Maharashtra';
-      } else if (cityLower.includes('bangalore') || cityLower.includes('bengaluru')) {
-        resolvedState = 'Karnataka';
-      } else if (cityLower.includes('hyderabad')) {
-        resolvedState = 'Telangana';
-      } else if (resolvedState.toUpperCase() === 'UP') {
-        resolvedState = '';
-      }
-
       state: resolvedState,
       city: String(city).trim(),
       locality: locality ? locality.trim() : (Array.isArray(areas) && areas[0] ? areas[0] : ''),

@@ -1,7 +1,7 @@
 // routes/authorityRoutes.js
 import express from 'express';
 import Authority from '../models/Authority.js';
-import { protect, authorize } from '../middleware/auth.js';
+import { protect, adminOnly } from '../middleware/authMiddleware.js';
 
 const router = express.Router();
 
@@ -42,7 +42,7 @@ router.get('/', async (req, res) => {
 
 // Admin endpoints
 // POST /api/authorities - add new authority
-router.post('/', protect, authorize('admin'), async (req, res) => {
+router.post('/', protect, adminOnly, async (req, res) => {
   try {
     const { name } = req.body;
     if (!name || !name.trim()) {
@@ -56,7 +56,7 @@ router.post('/', protect, authorize('admin'), async (req, res) => {
 });
 
 // DELETE /api/authorities/:id - delete authority
-router.delete('/:id', protect, authorize('admin'), async (req, res) => {
+router.delete('/:id', protect, adminOnly, async (req, res) => {
   try {
     await Authority.findByIdAndDelete(req.params.id);
     res.json({ success: true, message: 'Authority deleted successfully' });
