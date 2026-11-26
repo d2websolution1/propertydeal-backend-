@@ -2,6 +2,7 @@
 import mongoose from 'mongoose';
 import Property from '../models/Property.js';
 import User from '../models/User.js';
+import { resolvePlanDetails } from '../utils/planHelper.js';
 
 // GET /api/admin/properties?status=&search=&userType=&page=1&limit=12
 export const getAllProperties = async (req, res) => {
@@ -58,82 +59,92 @@ export const getAllProperties = async (req, res) => {
       Property.countDocuments(mongoQuery),
     ]);
 
-    // Find any missing owners by email or phone to guarantee activePlan is always present
-    const unpopulatedEmails = rows
-      .filter((r) => !r.owner || !r.owner.activePlan)
-      .map((r) => (r.ownerEmail || r.contactEmail || '').toLowerCase().trim())
-      .filter(Boolean);
+    // Gather all owner IDs, emails, and phones to query MongoDB Atlas Users in bulk
+    // This guarantees that activePlan is always current regardless of population or stale caches
+    const ownerIds = [];
+    const ownerEmails = [];
+    const ownerPhones = [];
 
-    const unpopulatedPhones = rows
-      .filter((r) => !r.owner || !r.owner.activePlan)
-      .map((r) => (r.ownerPhone || r.contactPhone || '').replace(/\D/g, ''))
-      .filter((p) => p && p.length >= 10);
+    rows.forEach((r) => {
+      const oid = r.owner?._id || r.owner;
+      if (oid && mongoose.Types.ObjectId.isValid(oid)) {
+        ownerIds.push(new mongoose.Types.ObjectId(oid));
+      }
+      const em = (r.ownerEmail || r.contactEmail || r.owner?.email || '').toLowerCase().trim();
+      if (em) ownerEmails.push(em);
 
-    let emailUserMap = new Map();
-    if (unpopulatedEmails.length > 0 || unpopulatedPhones.length > 0) {
+      const ph = (r.ownerPhone || r.contactPhone || r.owner?.phone || '').replace(/\D/g, '');
+      if (ph && ph.length >= 10) ownerPhones.push(ph);
+    });
+
+    const userConditions = [];
+    if (ownerIds.length > 0) userConditions.push({ _id: { $in: ownerIds } });
+    if (ownerEmails.length > 0) userConditions.push({ email: { $in: ownerEmails } });
+    if (ownerPhones.length > 0) {
+      userConditions.push({
+        $or: ownerPhones.map((p) => ({ phone: { $regex: p } })),
+      });
+    }
+
+    let allMatchedUsers = [];
+    if (userConditions.length > 0) {
       try {
-        const queryConditions = [];
-        if (unpopulatedEmails.length > 0) queryConditions.push({ email: { $in: unpopulatedEmails } });
-        if (unpopulatedPhones.length > 0) {
-          queryConditions.push({
-            $or: unpopulatedPhones.map((ph) => ({ phone: { $regex: ph } })),
-          });
-        }
-
-        const users = await User.find(queryConditions.length > 1 ? { $or: queryConditions } : queryConditions[0])
-          .select('id name email phone userType role companyName reraNumber city avatar activePlan')
+        allMatchedUsers = await User.find(userConditions.length > 1 ? { $or: userConditions } : userConditions[0])
+          .select('id name email phone userType role companyName reraNumber city avatar activePlan listingLimit featuredLimit')
           .lean();
-
-        users.forEach((u) => {
-          if (u.email) emailUserMap.set(u.email.toLowerCase().trim(), u);
-          if (u.phone) {
-            const digits = u.phone.replace(/\D/g, '');
-            if (digits) emailUserMap.set(digits, u);
-          }
-        });
       } catch (uErr) {
-        console.warn('Error fetching unpopulated owners in admin properties:', uErr.message);
+        console.warn('Error fetching matched users in admin properties:', uErr.message);
       }
     }
 
+    const userById = new Map();
+    const userByEmail = new Map();
+    const userByPhone = new Map();
+
+    allMatchedUsers.forEach((u) => {
+      if (u._id) userById.set(u._id.toString(), u);
+      if (u.id) userById.set(u.id.toString(), u);
+      if (u.email) userByEmail.set(u.email.toLowerCase().trim(), u);
+      if (u.phone) {
+        const digits = u.phone.replace(/\D/g, '');
+        if (digits) userByPhone.set(digits, u);
+      }
+    });
+
     const normalizedProperties = rows.map((r) => {
-      let ownerObj = r.owner || null;
-      const email = (r.ownerEmail || r.contactEmail || '').toLowerCase().trim();
-      const phoneDigits = (r.ownerPhone || r.contactPhone || '').replace(/\D/g, '');
+      const rawOwnerId = (r.owner?._id || r.owner || '').toString();
+      const email = (r.ownerEmail || r.contactEmail || r.owner?.email || '').toLowerCase().trim();
+      const phoneDigits = (r.ownerPhone || r.contactPhone || r.owner?.phone || '').replace(/\D/g, '');
 
-      if (!ownerObj || !ownerObj.activePlan) {
-        if (email && emailUserMap.has(email)) {
-          ownerObj = { ...(ownerObj || {}), ...emailUserMap.get(email) };
-        } else if (phoneDigits && emailUserMap.has(phoneDigits)) {
-          ownerObj = { ...(ownerObj || {}), ...emailUserMap.get(phoneDigits) };
-        }
+      let matchedUser = null;
+      if (rawOwnerId && userById.has(rawOwnerId)) {
+        matchedUser = userById.get(rawOwnerId);
+      } else if (email && userByEmail.has(email)) {
+        matchedUser = userByEmail.get(email);
+      } else if (phoneDigits && userByPhone.has(phoneDigits)) {
+        matchedUser = userByPhone.get(phoneDigits);
       }
 
-      // If user has an upgraded active plan, ensure selectedPlan reflects it
-      let selectedPlan = r.selectedPlan;
-      const ownerPlan = (ownerObj?.activePlan || '').trim();
-      const isOwnerPlanFree =
-        !ownerPlan ||
-        ownerPlan.toLowerCase().includes('free') ||
-        ownerPlan.toLowerCase().includes('starter');
+      const existingOwnerObj = r.owner && typeof r.owner === 'object' ? r.owner : {};
+      const ownerObj = {
+        ...existingOwnerObj,
+        ...(matchedUser || {}),
+        id: matchedUser?._id?.toString() || matchedUser?.id || existingOwnerObj.id || existingOwnerObj._id?.toString() || rawOwnerId,
+        _id: matchedUser?._id?.toString() || matchedUser?.id || existingOwnerObj._id?.toString() || rawOwnerId,
+        activePlan: matchedUser?.activePlan || existingOwnerObj.activePlan || r.selectedPlan?.name || 'Free Starter (30 Days)',
+      };
 
-      if (!isOwnerPlanFree) {
-        selectedPlan = {
-          name: ownerPlan,
-          price: ownerPlan.includes('499')
-            ? '₹499'
-            : ownerPlan.includes('1499')
-            ? '₹1499'
-            : ownerPlan.includes('999')
-            ? '₹999'
-            : ownerPlan.includes('1999')
-            ? '₹1999'
-            : ownerPlan.includes('4999')
-            ? '₹4999'
-            : selectedPlan?.price || '₹499',
-          days: selectedPlan?.days || (ownerPlan.includes('60') ? 60 : ownerPlan.includes('365') ? 365 : ownerPlan.includes('90') ? 90 : ownerPlan.includes('45') ? 45 : 30),
-        };
-      }
+      // Resolve definitive plan details:
+      // If user has an activePlan set, ALWAYS prioritize it so admin and user properties show the exact plan!
+      const effectivePlanName = matchedUser?.activePlan || existingOwnerObj.activePlan || r.selectedPlan?.name || 'Free Starter (30 Days)';
+      const planInfo = resolvePlanDetails(effectivePlanName, r.selectedPlan?.price, r.selectedPlan?.days);
+
+      const selectedPlan = {
+        name: planInfo.name,
+        price: planInfo.price,
+        days: planInfo.days,
+        requestedAt: r.selectedPlan?.requestedAt || new Date(),
+      };
 
       return {
         ...r,

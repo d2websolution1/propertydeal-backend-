@@ -4,6 +4,7 @@ import { Op } from 'sequelize';
 import User from '../models/User.js';
 import Payment from '../models/Payment.js';
 import Property from '../models/Property.js';
+import { resolvePlanDetails } from '../utils/planHelper.js';
 
 // GET /api/admin/users?search=&role=&page=1&limit=10
 export const getAllUsers = async (req, res) => {
@@ -173,16 +174,15 @@ export const updateUserProfile = async (req, res) => {
             ] : [])
           );
         }
-        const planPrice = activePlan.includes('499') ? '₹499' : activePlan.includes('1499') ? '₹1499' : activePlan.includes('999') ? '₹999' : '₹0';
-        const planDays = activePlan.includes('60') ? 60 : activePlan.includes('365') ? 365 : 30;
+        const planInfo = resolvePlanDetails(activePlan);
         await Property.updateMany(
           { $or: orConditions },
           {
             $set: {
               selectedPlan: {
-                name: activePlan,
-                price: planPrice,
-                days: planDays,
+                name: planInfo.name,
+                price: planInfo.price,
+                days: planInfo.days,
                 requestedAt: new Date(),
               },
             },
@@ -363,18 +363,8 @@ export const activateUserPlan = async (req, res) => {
     user.planExpiresAt = expiresAt;
 
     // Immediately synchronize selectedPlan on all properties posted by this user so Manage Properties & My Listings reflect it
+    const planInfo = resolvePlanDetails(chosenPlan, price, days);
     try {
-      const priceTag =
-        Number(price) > 0
-          ? `₹${price}`
-          : chosenPlan.includes('499')
-          ? '₹499'
-          : chosenPlan.includes('1499')
-          ? '₹1499'
-          : chosenPlan.includes('999')
-          ? '₹999'
-          : '₹0';
-
       const userEmail = (user.email || '').toLowerCase().trim();
       const userPhone = (user.phone || '').trim();
 
@@ -409,9 +399,9 @@ export const activateUserPlan = async (req, res) => {
         {
           $set: {
             selectedPlan: {
-              name: chosenPlan,
-              price: priceTag,
-              days: days,
+              name: planInfo.name,
+              price: planInfo.price,
+              days: planInfo.days,
               requestedAt: new Date(),
             },
           },
@@ -435,17 +425,18 @@ export const activateUserPlan = async (req, res) => {
         userEmail: user.email,
         userPhone: user.phone || '',
         userType: validUserType,
-        plan: chosenPlan,
+        plan: planInfo.name,
         amount:
           Number(price) >= 0
             ? Number(price)
-            : chosenPlan.includes('499')
-            ? 499
-            : chosenPlan.includes('1499')
-            ? 1499
-            : chosenPlan.includes('999')
-            ? 999
-            : 0,
+            : planInfo.priceNum,
+        currency: 'INR',
+        status: 'completed',
+        paymentMethod: 'Admin Activation / WhatsApp Chat',
+        paidAt: new Date(),
+        expiresAt,
+        notes: `Plan activated by Admin. Listing quota updated to ${limit} properties (${days} days validity).`,
+      });
         currency: 'INR',
         status: 'completed',
         paymentMethod: 'Admin Activation / WhatsApp Chat',
