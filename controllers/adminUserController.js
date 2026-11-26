@@ -177,7 +177,16 @@ export const updateUserProfile = async (req, res) => {
         const planDays = activePlan.includes('60') ? 60 : activePlan.includes('365') ? 365 : 30;
         await Property.updateMany(
           { $or: orConditions },
-          { $set: { 'selectedPlan.name': activePlan, 'selectedPlan.price': planPrice, 'selectedPlan.days': planDays } }
+          {
+            $set: {
+              selectedPlan: {
+                name: activePlan,
+                price: planPrice,
+                days: planDays,
+                requestedAt: new Date(),
+              },
+            },
+          }
         );
       } catch (pErr) {
         console.warn('Property sync in updateUserProfile:', pErr.message);
@@ -399,9 +408,12 @@ export const activateUserPlan = async (req, res) => {
         { $or: orConditions },
         {
           $set: {
-            'selectedPlan.name': chosenPlan,
-            'selectedPlan.price': priceTag,
-            'selectedPlan.days': days,
+            selectedPlan: {
+              name: chosenPlan,
+              price: priceTag,
+              days: days,
+              requestedAt: new Date(),
+            },
           },
         }
       );
