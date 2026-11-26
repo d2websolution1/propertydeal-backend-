@@ -17,6 +17,14 @@ const locationSchema = new mongoose.Schema({
     type: [String],
     default: [],
   },
+  townships: {
+    type: [String],
+    default: [],
+  },
+  subAreas: {
+    type: [String],
+    default: [],
+  },
   isPopular: {
     type: Boolean,
     default: true,

@@ -6,6 +6,8 @@ import {
   createLocation,
   updateLocation,
   addAreaToCity,
+  addTownshipToCity,
+  addSubAreaToCity,
   deleteLocation,
 } from '../controllers/locationController.js';
 
@@ -17,6 +19,8 @@ router.get('/', getAllLocationsAdmin);
 router.post('/', createLocation);
 router.put('/:id', updateLocation);
 router.post('/:id/areas', addAreaToCity);
+router.post('/:id/townships', addTownshipToCity);
+router.post('/:id/subareas', addSubAreaToCity);
 router.delete('/:id', deleteLocation);
 
 export default router;

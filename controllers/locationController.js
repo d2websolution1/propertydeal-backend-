@@ -1,6 +1,33 @@
 // controllers/locationController.js
 import Location from '../models/Location.js';
 
+const DEFAULT_TOWNSHIPS = [
+  'Mahima Panorama',
+  'Mahima Florenza',
+  'Vatika Infotech City',
+  'Ashiana Town',
+  'Omaxe City',
+  'Manglam Grand City',
+  'UDB Greens',
+  'Unique Sapphire',
+  'Green Meadows',
+  'Siddhi Homes',
+  'Trimurty Ariana',
+];
+
+const DEFAULT_SUBAREAS = [
+  'Block A',
+  'Block B',
+  'Block C',
+  'Phase 1',
+  'Phase 2',
+  'Extension',
+  'Main Road Facing',
+  'Near Metro Station',
+  'Sector 62',
+  'Sector 18 Pocket 2',
+];
+
 const DEFAULT_LOCATIONS = [
   {
     city: 'Jaipur',
@@ -26,6 +53,8 @@ const DEFAULT_LOCATIONS = [
       'Sirsi Road',
       'Sikar Road',
     ],
+    townships: DEFAULT_TOWNSHIPS,
+    subAreas: DEFAULT_SUBAREAS,
     isPopular: true,
     order: 1,
   },
@@ -113,7 +142,7 @@ export const getAllLocationsAdmin = async (req, res) => {
 
 export const createLocation = async (req, res) => {
   try {
-    const { city, state, areas, isPopular } = req.body;
+    const { city, state, areas, townships, subAreas, isPopular } = req.body;
     if (!city || !city.trim()) {
       return res.status(400).json({ message: 'City name is required' });
     }
@@ -132,10 +161,32 @@ export const createLocation = async (req, res) => {
       areaList = areas.split(',').map(a => a.trim()).filter(Boolean);
     }
 
+    // Process townships
+    let townshipList = [];
+    if (Array.isArray(townships)) {
+      townshipList = townships.map(t => String(t).trim()).filter(Boolean);
+    } else if (typeof townships === 'string') {
+      townshipList = townships.split(',').map(t => t.trim()).filter(Boolean);
+    } else {
+      townshipList = [...DEFAULT_TOWNSHIPS];
+    }
+
+    // Process subAreas
+    let subAreaList = [];
+    if (Array.isArray(subAreas)) {
+      subAreaList = subAreas.map(s => String(s).trim()).filter(Boolean);
+    } else if (typeof subAreas === 'string') {
+      subAreaList = subAreas.split(',').map(s => s.trim()).filter(Boolean);
+    } else {
+      subAreaList = [...DEFAULT_SUBAREAS];
+    }
+
     const newLoc = await Location.create({
       city: cleanCity,
       state: state?.trim() || 'Rajasthan',
       areas: [...new Set(areaList)],
+      townships: [...new Set(townshipList)],
+      subAreas: [...new Set(subAreaList)],
       isPopular: isPopular !== false,
       status: 'active',
       order: 0,
@@ -150,7 +201,7 @@ export const createLocation = async (req, res) => {
 export const updateLocation = async (req, res) => {
   try {
     const { id } = req.params;
-    const { city, state, areas, isPopular, status, order } = req.body;
+    const { city, state, areas, townships, subAreas, isPopular, status, order } = req.body;
 
     const loc = await Location.findById(id);
     if (!loc) {
@@ -171,6 +222,26 @@ export const updateLocation = async (req, res) => {
         areaList = areas.split(',').map(a => a.trim()).filter(Boolean);
       }
       loc.areas = [...new Set(areaList)];
+    }
+
+    if (townships !== undefined) {
+      let tList = [];
+      if (Array.isArray(townships)) {
+        tList = townships.map(t => String(t).trim()).filter(Boolean);
+      } else if (typeof townships === 'string') {
+        tList = townships.split(',').map(t => t.trim()).filter(Boolean);
+      }
+      loc.townships = [...new Set(tList)];
+    }
+
+    if (subAreas !== undefined) {
+      let sList = [];
+      if (Array.isArray(subAreas)) {
+        sList = subAreas.map(s => String(s).trim()).filter(Boolean);
+      } else if (typeof subAreas === 'string') {
+        sList = subAreas.split(',').map(s => s.trim()).filter(Boolean);
+      }
+      loc.subAreas = [...new Set(sList)];
     }
 
     await loc.save();
@@ -201,6 +272,56 @@ export const addAreaToCity = async (req, res) => {
     res.json(loc);
   } catch (error) {
     res.status(500).json({ message: 'Failed to add area', error: error.message });
+  }
+};
+
+export const addTownshipToCity = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { township } = req.body;
+
+    if (!township || !township.trim()) {
+      return res.status(400).json({ message: 'Township name is required' });
+    }
+
+    const loc = await Location.findById(id);
+    if (!loc) return res.status(404).json({ message: 'City not found' });
+
+    const cleanTownship = township.trim();
+    if (!Array.isArray(loc.townships)) loc.townships = [];
+    if (!loc.townships.includes(cleanTownship)) {
+      loc.townships.push(cleanTownship);
+      await loc.save();
+    }
+
+    res.json(loc);
+  } catch (error) {
+    res.status(500).json({ message: 'Failed to add township', error: error.message });
+  }
+};
+
+export const addSubAreaToCity = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { subArea } = req.body;
+
+    if (!subArea || !subArea.trim()) {
+      return res.status(400).json({ message: 'Sub-area name is required' });
+    }
+
+    const loc = await Location.findById(id);
+    if (!loc) return res.status(404).json({ message: 'City not found' });
+
+    const cleanSubArea = subArea.trim();
+    if (!Array.isArray(loc.subAreas)) loc.subAreas = [];
+    if (!loc.subAreas.includes(cleanSubArea)) {
+      loc.subAreas.push(cleanSubArea);
+      await loc.save();
+    }
+
+    res.json(loc);
+  } catch (error) {
+    res.status(500).json({ message: 'Failed to add sub-area', error: error.message });
   }
 };
 
