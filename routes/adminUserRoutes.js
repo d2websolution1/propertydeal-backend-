@@ -17,7 +17,13 @@ const router = express.Router();
 router.use(protect, adminOnly);
 
 router.get('/', getAllUsers);
+
+// Plan Activation - support both body-based and path-based, PUT and POST (before /:id)
+router.put('/activate-plan', activateUserPlan);
+router.post('/activate-plan', activateUserPlan);
 router.put('/:id/activate-plan', activateUserPlan);
+router.post('/:id/activate-plan', activateUserPlan);
+
 router.get('/:id', getUserProfile);
 router.put('/:id', updateUserProfile);
 router.patch('/:id/block', blockUser);

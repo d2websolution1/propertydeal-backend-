@@ -244,7 +244,7 @@ export const getMyPropertyListings = async (req, res) => {
     };
 
     const properties = await Property.find(filter)
-      .populate('owner', 'id name email phone userType companyName reraNumber avatar')
+      .populate('owner', 'id name email phone userType companyName reraNumber avatar activePlan listingLimit planExpiresAt')
       .sort({ createdAt: -1 });
 
     const counts = {

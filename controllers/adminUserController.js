@@ -189,38 +189,62 @@ export const deleteUser = async (req, res) => {
   }
 };
 
-// PUT /api/admin/users/:id/activate-plan - Admin directly activates/upgrades plan for a user
+// PUT or POST /api/admin/users/activate-plan (or /:id/activate-plan) - Admin directly activates/upgrades plan for a user
 export const activateUserPlan = async (req, res) => {
   try {
-    const rawId = req.params.id;
+    const rawId = req.params.id || req.body.userId || req.body.id || req.body.email || req.body.userEmail;
+    const targetEmail = (req.body.email || req.body.userEmail || (typeof rawId === 'string' && rawId.includes('@') ? rawId : '')).toLowerCase().trim();
+    const targetId = req.body.userId || req.body.id || (typeof rawId === 'string' && !rawId.includes('@') && rawId !== 'undefined' && rawId !== 'null' ? rawId : null);
+
     let user = null;
 
-    if (mongoose.Types.ObjectId.isValid(rawId)) {
+    if (targetId && mongoose.Types.ObjectId.isValid(targetId)) {
       try {
-        user = await User.findById(rawId);
+        user = await User.findById(targetId);
+      } catch (e) {}
+    }
+
+    if (!user && targetEmail) {
+      try {
+        user = await User.findOne({ email: targetEmail });
+      } catch (e) {}
+    }
+
+    if (!user && targetEmail) {
+      try {
+        user = await User.findOne({ email: { $regex: new RegExp(`^${targetEmail}$`, 'i') } });
+      } catch (e) {}
+    }
+
+    if (!user && rawId && rawId !== 'undefined' && rawId !== 'null') {
+      if (mongoose.Types.ObjectId.isValid(rawId)) {
+        try {
+          user = await User.findById(rawId);
+        } catch (e) {}
+      }
+      if (!user) {
+        try {
+          user = await User.findOne({
+            $or: [
+              { email: String(rawId).toLowerCase().trim() },
+              { phone: String(rawId).trim() },
+            ],
+          });
+        } catch (e) {}
+      }
+    }
+
+    if (!user && typeof User.findByPk === 'function' && targetId && mongoose.Types.ObjectId.isValid(targetId)) {
+      try {
+        user = await User.findByPk(targetId);
       } catch (e) {}
     }
 
     if (!user) {
-      try {
-        user = await User.findOne({
-          $or: [
-            ...(mongoose.Types.ObjectId.isValid(rawId) ? [{ _id: rawId }] : []),
-            { email: rawId },
-            { id: rawId },
-          ],
-        });
-      } catch (e) {}
-    }
-
-    if (!user && typeof User.findByPk === 'function') {
-      try {
-        user = await User.findByPk(rawId);
-      } catch (e) {}
-    }
-
-    if (!user) {
-      return res.status(404).json({ success: false, message: 'User not found in database' });
+      return res.status(404).json({
+        success: false,
+        message: `User not found in database for identifier: ${targetId || targetEmail || rawId}`,
+      });
     }
 
     const { planName, listingLimit, validityDays, featuredLimit, price } = req.body;
@@ -251,7 +275,7 @@ export const activateUserPlan = async (req, res) => {
     user.featuredLimit = (user.featuredLimit || 0) + featured;
     user.planExpiresAt = expiresAt;
 
-    // Immediately synchronize selectedPlan on all properties posted by this user so Manage Properties reflects it
+    // Immediately synchronize selectedPlan on all properties posted by this user so Manage Properties & My Listings reflect it
     try {
       const priceTag =
         Number(price) > 0
@@ -264,20 +288,40 @@ export const activateUserPlan = async (req, res) => {
           ? '₹999'
           : '₹0';
 
-      const propFilter = {
-        $or: [
-          { owner: userDocId },
-          ...(user.email ? [{ ownerEmail: user.email }, { contactEmail: user.email }] : []),
-        ],
-      };
+      const userEmail = (user.email || '').toLowerCase().trim();
+      const userPhone = (user.phone || '').trim();
 
-      await Property.updateMany(propFilter, {
-        $set: {
-          'selectedPlan.name': chosenPlan,
-          'selectedPlan.price': priceTag,
-          'selectedPlan.days': days,
-        },
-      });
+      const orConditions = [
+        { owner: userDocId },
+      ];
+      if (mongoose.Types.ObjectId.isValid(userDocId)) {
+        orConditions.push({ owner: new mongoose.Types.ObjectId(userDocId) });
+      }
+      if (userEmail) {
+        orConditions.push(
+          { ownerEmail: userEmail },
+          { contactEmail: userEmail },
+          { ownerEmail: { $regex: new RegExp(`^${userEmail}$`, 'i') } },
+          { contactEmail: { $regex: new RegExp(`^${userEmail}$`, 'i') } }
+        );
+      }
+      if (userPhone) {
+        orConditions.push(
+          { ownerPhone: userPhone },
+          { contactPhone: userPhone }
+        );
+      }
+
+      await Property.updateMany(
+        { $or: orConditions },
+        {
+          $set: {
+            'selectedPlan.name': chosenPlan,
+            'selectedPlan.price': priceTag,
+            'selectedPlan.days': days,
+          },
+        }
+      );
     } catch (propErr) {
       console.warn('Property sync on plan activation:', propErr.message);
     }
