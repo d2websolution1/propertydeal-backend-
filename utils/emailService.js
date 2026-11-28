@@ -68,7 +68,7 @@ export const getEmailConfigStatus = () => {
       configured: true,
       service: 'Resend API',
       apiKey: maskedKey,
-      fromEmail: process.env.RESEND_FROM || process.env.EMAIL_FROM || 'Property Adda <onboarding@resend.dev>',
+      fromEmail: process.env.RESEND_FROM || process.env.EMAIL_FROM || 'Property Adda <noreply@property-adda.com>',
       instructions: 'Resend API is active. Ready to deliver live OTP verification emails.',
     };
   }
@@ -145,7 +145,7 @@ export const sendOtpEmail = async (email, otp, name = 'Valued Client') => {
 
   if (resend) {
     try {
-      const fromEmail = process.env.RESEND_FROM || process.env.EMAIL_FROM || 'Property Adda <onboarding@resend.dev>';
+      const fromEmail = process.env.RESEND_FROM || process.env.EMAIL_FROM || 'Property Adda <noreply@property-adda.com>';
       const { data, error } = await resend.emails.send({
         from: fromEmail,
         to: [email],
