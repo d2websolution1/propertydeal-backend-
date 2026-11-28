@@ -64,37 +64,25 @@ dotenv.config();
 const app = express();
 
 // ── CORS Config ──
-const allowedOrigins = [
-  'http://localhost:3000',
-  'http://localhost:5173',
-  'http://localhost:5174',
-  'http://localhost:5175',
-  'http://127.0.0.1:5173',
-  'http://127.0.0.1:5174',
-  process.env.FRONTEND_URL,
-].filter(Boolean);
-
 app.use(cors({
-  origin: function (origin, callback) {
-    if (!origin) return callback(null, true);
-    if (/^http:\/\/localhost(:\d+)?$/.test(origin) || /^http:\/\/127\.0\.0\.1(:\d+)?$/.test(origin) || allowedOrigins.includes(origin)) {
-      return callback(null, true);
-    }
-    // Allow any Vercel deployment (preview or production)
-    if (/^https:\/\/.*\.vercel\.app$/.test(origin)) {
-      return callback(null, true);
-    }
-    return callback(new Error('Not allowed by CORS'));
-  },
+  origin: true,
   credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
 }));
 
 app.use(express.json({ limit: '25mb' }));
 app.use(express.urlencoded({ extended: true, limit: '25mb' }));
 
-app.get('/', (req, res) => {
-  res.send('API is running...');
-});
+// ── Serve Frontend Production Build (Single Web App) ──
+import path from 'path';
+import { fileURLToPath } from 'url';
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const publicPath = path.join(__dirname, 'public');
+
+app.use(express.static(publicPath));
+
 
 // ── Core Routes ──
 app.use('/api/auth', authRoutes);
@@ -152,8 +140,13 @@ app.use('/api/subscriptions', subscriptionRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/authorities', authorityRoutes);
 
+// ── Root API Status ──
+app.get('/', (req, res) => {
+  res.json({ success: true, message: 'PropertyAdda API is live and running perfectly!' });
+});
+
 const PORT = process.env.PORT || 5000;
 
 connectDB().then(() => {
-  app.listen(PORT, () => console.log(`✅ Server is running at http://localhost:${PORT}`));
+  app.listen(PORT, '0.0.0.0', () => console.log(`✅ Server is running on port ${PORT}`));
 });

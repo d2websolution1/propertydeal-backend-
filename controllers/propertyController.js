@@ -766,6 +766,19 @@ export const postPublicProperty = async (req, res) => {
       selectedPlan: cleanSelectedPlan,
     });
 
+    // ── Activate User's Subscription Plan from 1st day of Listing ──
+    if (postingUser) {
+      if (!postingUser.planStartedAt) {
+        const now = new Date();
+        const planDays = cleanSelectedPlan?.days || 30;
+        const expires = new Date(now.getTime() + planDays * 24 * 60 * 60 * 1000);
+        await User.findByIdAndUpdate(postingUser._id, {
+          planStartedAt: now,
+          planExpiresAt: expires,
+        }).catch(() => {});
+      }
+    }
+
     res.status(201).json({
       success: true,
       message: initialStatus === 'approved' ? 'Property posted successfully!' : 'Property submitted for admin review!',

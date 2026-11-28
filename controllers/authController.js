@@ -37,6 +37,7 @@ export const sanitizeUser = (user) => ({
   activePlan: user.activePlan || 'Free Starter (30 Days)',
   listingLimit: user.listingLimit !== undefined ? user.listingLimit : 2,
   featuredLimit: user.featuredLimit || 0,
+  planStartedAt: user.planStartedAt || null,
   planExpiresAt: user.planExpiresAt || null,
   isVerifiedAgent: !!user.isVerifiedAgent,
   agentRequestStatus: user.agentRequestStatus || 'none',
@@ -73,8 +74,9 @@ export const register = async (req, res) => {
 
     const resolvedUserType = ['Owner', 'Dealer / Agent', 'Builder'].includes(userType) ? userType : 'Owner';
     const resolvedPlan = req.body.activePlan || (resolvedUserType === 'Dealer / Agent' ? 'Pro Agent Plan' : 'Free Starter (30 Days)');
-    const vDays = Number(req.body.validityDays || (resolvedUserType === 'Dealer / Agent' ? 90 : 30));
-    const planExpiresAt = new Date(Date.now() + vDays * 24 * 60 * 60 * 1000);
+    // Plan starts only when first property listing is posted!
+    const planStartedAt = null;
+    const planExpiresAt = null;
 
     const resolvedRole = isAdminEmail(cleanEmail)
       ? 'admin'
@@ -92,6 +94,7 @@ export const register = async (req, res) => {
       activePlan: resolvedPlan,
       listingLimit: resolvedUserType === 'Dealer / Agent' ? 50 : 2,
       featuredLimit: resolvedUserType === 'Dealer / Agent' ? 5 : 0,
+      planStartedAt,
       planExpiresAt,
     });
 
@@ -379,8 +382,8 @@ export const verifyOtp = async (req, res) => {
       const hashedPassword = await bcrypt.hash(clientPassword, 10);
       const chosenUserType = userType || storedRecord.userType || 'Owner';
       const chosenPlan = activePlan || storedRecord.activePlan || (chosenUserType === 'Dealer / Agent' ? 'Pro Agent Plan' : 'Free Starter (30 Days)');
-      const vDays = Number(validityDays || storedRecord.validityDays || (chosenUserType === 'Dealer / Agent' ? 90 : 30));
-      const planExpiresAt = new Date(Date.now() + vDays * 24 * 60 * 60 * 1000);
+      const planStartedAt = storedRecord.planStartedAt || null;
+      const planExpiresAt = storedRecord.planExpiresAt || null;
 
       const assignedRole = isAdminEmail(cleanEmail) ? 'admin' : 'user';
 

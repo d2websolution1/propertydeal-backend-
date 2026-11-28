@@ -115,9 +115,13 @@ const userSchema = new mongoose.Schema({
     type: Number,
     default: 0,
   },
+  planStartedAt: {
+    type: Date,
+    default: null,
+  },
   planExpiresAt: {
     type: Date,
-    default: () => new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+    default: null,
   },
   isVerifiedAgent: {
     type: Boolean,
