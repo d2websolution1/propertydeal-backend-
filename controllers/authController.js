@@ -289,41 +289,69 @@ const otpStore = new Map();
 // POST /api/auth/send-otp - Send OTP to Gmail / Email for Client Signup or Login
 export const sendOtp = async (req, res) => {
   try {
-    const { email, name, phone, userType, type = 'auth' } = req.body;
+    const { email, name, phone, userType, password, type = 'auth' } = req.body;
 
-    if (!email) {
-      return res.status(400).json({ message: 'Email address is required' });
+    if (!email || !email.includes('@')) {
+      return res.status(400).json({ success: false, message: 'A valid Gmail / Email address is required' });
     }
 
     const cleanEmail = email.toLowerCase().trim();
 
-    // Generate 6 digit numeric code
+    // Check if user already exists
+    const existingUser = await User.findOne({ email: cleanEmail });
+
+    // If attempting to signup with an existing account
+    if (type === 'signup' && existingUser) {
+      return res.status(400).json({
+        success: false,
+        message: 'An account with this Gmail address already exists. Please Sign In with your password.',
+      });
+    }
+
+    // Check phone if provided during signup
+    if (type === 'signup' && phone) {
+      const cleanDigits = phone.replace(/\D/g, '').slice(-10);
+      if (cleanDigits.length === 10) {
+        const existingPhone = await User.findOne({
+          phone: { $regex: cleanDigits + '$' }
+        });
+        if (existingPhone) {
+          return res.status(400).json({
+            success: false,
+            message: 'An account with this mobile number already exists. Please Sign In or use another number.',
+          });
+        }
+      }
+    }
+
+    // Generate 6-digit numeric OTP code
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
     const expiresAt = Date.now() + 10 * 60 * 1000; // 10 minutes validity
 
     otpStore.set(cleanEmail, {
       otp,
       expiresAt,
-      name: name?.trim() || 'Valued Client',
+      name: name?.trim() || (cleanEmail.split('@')[0]),
       phone: phone?.trim() || null,
       userType: userType || 'Owner',
-      password: req.body.password || null,
+      password: password || req.body.password || null,
       type,
     });
 
-    // Check if user already exists
-    const existingUser = await User.findOne({ where: { email: cleanEmail } });
+    console.log(`\n==================================================`);
+    console.log(`🔑 [OTP GENERATED] Recipient: ${cleanEmail} | OTP: ${otp}`);
+    console.log(`==================================================\n`);
 
-    // Send email using nodemailer service
-    const emailResult = await sendOtpEmail(cleanEmail, otp, name || (existingUser ? existingUser.name : 'Valued Client'));
+    // Dispatch email using Resend / Email service
+    const emailResult = await sendOtpEmail(cleanEmail, otp, name?.trim() || (existingUser ? existingUser.name : 'Valued Client'));
 
     if (!emailResult.sent) {
       console.error(`❌ OTP Email dispatch failed to ${cleanEmail}:`, emailResult.error || emailResult.message);
       return res.status(503).json({
         success: false,
         message: emailResult.mode === 'unconfigured'
-          ? 'Email SMTP is not configured on the server. Please add EMAIL_USER and EMAIL_PASS (or Hostinger SMTP credentials) in Render Dashboard Environment Variables.'
-          : `Failed to deliver verification email: ${emailResult.error || 'SMTP delivery failed'}. Please check SMTP configuration on server.`,
+          ? 'Email service is not yet configured. Please set RESEND_API_KEY in Hostinger Environment Variables.'
+          : `Failed to deliver OTP to ${cleanEmail}: ${emailResult.error || 'Email service error'}. Please verify your Resend credentials.`,
       });
     }
 
@@ -334,7 +362,7 @@ export const sendOtp = async (req, res) => {
     });
   } catch (error) {
     console.error('❌ Error sending OTP:', error);
-    res.status(500).json({ message: 'Failed to send verification code', error: error.message });
+    res.status(500).json({ success: false, message: 'Failed to send verification code', error: error.message });
   }
 };
 
@@ -353,74 +381,74 @@ export const verifyOtp = async (req, res) => {
     const { email, otp, name, phone, userType, password, activePlan, validityDays } = req.body;
 
     if (!email || !otp) {
-      return res.status(400).json({ message: 'Email and OTP are required' });
+      return res.status(400).json({ success: false, message: 'Email and 6-digit OTP code are required' });
     }
 
     const cleanEmail = email.toLowerCase().trim();
     const storedRecord = otpStore.get(cleanEmail);
 
     if (!storedRecord) {
-      return res.status(400).json({ message: 'No OTP requested for this email or OTP expired. Please request a new code.' });
+      return res.status(400).json({ success: false, message: 'No OTP requested for this email or OTP expired. Please request a new code.' });
     }
 
     if (Date.now() > storedRecord.expiresAt) {
       otpStore.delete(cleanEmail);
-      return res.status(400).json({ message: 'OTP has expired. Please request a new one.' });
+      return res.status(400).json({ success: false, message: 'OTP has expired. Please request a new code.' });
     }
 
     if (storedRecord.otp !== otp.trim()) {
-      return res.status(400).json({ message: 'Invalid OTP code. Please enter the correct code.' });
+      return res.status(400).json({ success: false, message: 'Invalid OTP code. Please enter the correct 6-digit code sent to your email.' });
     }
 
     // OTP is valid! Check if user exists
-    let user = await User.findOne({ where: { email: cleanEmail } });
+    let user = await User.findOne({ email: cleanEmail });
 
     if (!user) {
       // Create new client user
-      const clientName = name?.trim() || storedRecord.name || cleanEmail.split('@')[0];
-      const clientPassword = password || `pd_${Math.random().toString(36).substring(2, 10)}`;
+      const clientName = (name || storedRecord.name || cleanEmail.split('@')[0]).trim();
+      const clientPassword = password || storedRecord.password || `pd_${Math.random().toString(36).substring(2, 10)}`;
       const hashedPassword = await bcrypt.hash(clientPassword, 10);
       const chosenUserType = userType || storedRecord.userType || 'Owner';
-      const chosenPlan = activePlan || storedRecord.activePlan || (chosenUserType === 'Dealer / Agent' ? 'Pro Agent Plan' : 'Free Starter (30 Days)');
-      const planStartedAt = storedRecord.planStartedAt || null;
-      const planExpiresAt = storedRecord.planExpiresAt || null;
+      const chosenPlan = activePlan || (chosenUserType === 'Dealer / Agent' ? 'Pro Agent Plan (90 Days)' : 'Free Starter (30 Days)');
+
+      const nameParts = clientName.split(' ');
+      const firstName = nameParts[0] || '';
+      const lastName = nameParts.slice(1).join(' ') || '';
 
       const assignedRole = isAdminEmail(cleanEmail) ? 'admin' : 'user';
 
       user = await User.create({
         name: clientName,
+        firstName,
+        lastName,
         email: cleanEmail,
         password: hashedPassword,
-        phone: phone?.trim() || storedRecord.phone || null,
+        phone: (phone || storedRecord.phone || '').trim() || null,
         userType: chosenUserType,
-        role: assignedRole, // Admin or Client role
+        role: assignedRole,
         activePlan: chosenPlan,
         listingLimit: chosenUserType === 'Dealer / Agent' ? 50 : 2,
         featuredLimit: chosenUserType === 'Dealer / Agent' ? 5 : 0,
-        planExpiresAt,
+        planStartedAt: null, // Subscription activates ONLY on 1st property listing!
+        planExpiresAt: null,
       });
-      console.log(`🎉 New account registered via OTP: ${cleanEmail} (role: ${assignedRole})`);
+      console.log(`🎉 New account verified and registered via OTP: ${cleanEmail} (role: ${assignedRole})`);
     } else {
       if (user.isBlocked) {
-        return res.status(403).json({ message: 'This account is blocked. Please contact support.' });
+        return res.status(403).json({ success: false, message: 'This account is blocked. Please contact support.' });
       }
       if (isAdminEmail(cleanEmail) && user.role !== 'admin') {
         user.role = 'admin';
         console.log(`⭐ Auto-upgraded existing account to admin via OTP: ${cleanEmail}`);
       }
-      if (phone && !user.phone) {
-        user.phone = phone.trim();
+      if ((phone || storedRecord.phone) && !user.phone) {
+        user.phone = (phone || storedRecord.phone).trim();
       }
-      if (password) {
-        user.password = await bcrypt.hash(password, 10);
+      if (password || storedRecord.password) {
+        user.password = await bcrypt.hash(password || storedRecord.password, 10);
       }
       if (userType && user.userType !== userType) {
         user.userType = userType;
-      }
-      if (activePlan) {
-        user.activePlan = activePlan;
-        const vDays = Number(validityDays || 30);
-        user.planExpiresAt = new Date(Date.now() + vDays * 24 * 60 * 60 * 1000);
       }
       await user.save();
       console.log(`✅ Existing client authenticated via OTP: ${cleanEmail}`);
@@ -429,16 +457,17 @@ export const verifyOtp = async (req, res) => {
     // Delete used OTP
     otpStore.delete(cleanEmail);
 
-    const token = generateToken(user.id);
+    const token = generateToken(user._id || user.id);
 
     res.json({
       success: true,
       token,
       user: sanitizeUser(user),
+      message: 'Email verified successfully! Welcome to Property Adda.',
     });
   } catch (error) {
     console.error('❌ Error verifying OTP:', error);
-    res.status(500).json({ message: 'Verification failed', error: error.message });
+    res.status(500).json({ success: false, message: 'Verification failed', error: error.message });
   }
 };
 
